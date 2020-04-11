@@ -3,18 +3,20 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.4.0 Alpha
+# Version: 0.5.0 Alpha
 ###########################################################################
 [CmdletBinding()]
 param (
-    [string]$h,
-    [string]$help,
+    [switch]$h,
+    [switch]$help,
     [string]$l,
     [string]$log,
     [string]$o,
     [string]$output,
     [string]$p,
     [string]$path,
+    [string]$s,
+    [string]$suffix,
     [string]$t,
     [string]$thread
 )
@@ -22,11 +24,14 @@ if ( $l ) { $LogFilePath = $l } else { $LogFilePath = $log }
 if ( $o ) { $OutputPath = $o } else { $OutputPath = $output }
 if ( $p ) { $InputPath = $p } else { $InputPath = $path }
 if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
+if ( $s ) { $FileSuffix = $t } else { $FileSuffix = $suffix }
+
 function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
     $WindowWidth = $host.UI.RawUI.WindowSize.Width
     $WindowHeight = $host.UI.RawUI.WindowSize.Height
     $WriteColor = $host.UI.RawUI.ForegroundColor
     switch ( $WriteType ) {
+        "Output" { }
         "Verbose" { $WriteContent = "- " + $WriteContent }
         "Info" { $WriteContent = "> " + $WriteContent }
         "Warning" { $WriteContent = "Warning: " + $WriteContent; $WriteColor = "Yellow" }
@@ -35,6 +40,32 @@ function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
         "Done" { $WriteColor = "Green" }
+        "Help" {
+            Write-Host "    Usage:"
+            Write-Host "        flacre " -ForegroundColor White -NoNewline; Write-Host "[options] -path [<inputpath>] -output [<outputpath>/Replace]`n"
+            Write-Host "    Options:"
+            Write-Host "    -p, -path" -ForegroundColor Yellow -NoNewline; Write-Host " <path>" -ForegroundColor Green
+            Write-Host "        Input option. The argument must be existd. Support file and folder. When you input a folder, we will search all FLAC files in the folder and sub-folders."
+            Write-Host "    -o, -output" -ForegroundColor Yellow -NoNewline; Write-Host " <path> " -ForegroundColor Green -NoNewline; Write-Host "/" -NoNewline; Write-Host " Replace" -ForegroundColor Green
+            Write-Host "        Output option. Support file and folder. When output path is empty or it was same as the input path, we will create a new folder `"Recompressed`" in the path root and saving files. If you want to replace the older file, please use " -NoNewline; Write-Host "-output Replace " -ForegroundColor Yellow -NoNewline; Write-Host "."
+            Write-Host "    -t, -thread" -ForegroundColor Yellow -NoNewline; Write-Host " <int>" -ForegroundColor Green
+            Write-Host "        Thread option. It decides the number of compress threads at the same time."
+            Write-Host "    -s, -suffix" -ForegroundColor Yellow -NoNewline; Write-Host " <string>" -ForegroundColor Green
+            Write-Host "        Suffix option. It effects recompressed files' name."
+            Write-Host "    -l, -log" -ForegroundColor Yellow -NoNewline; Write-Host " <path>" -ForegroundColor Green
+            Write-Host "        Log option. You can export log to the path. By default, log will be generate in TEMP folder."
+            Write-Host "    -h, -help" -ForegroundColor Yellow
+            Write-Host "        Display the help.`n"
+            Write-Host "    Examples:"
+            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " C:\Users\Admin\Music" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\Music"
+            Write-Host "        Recompress all FLAC files from C:\Users\Admin\Music and save to D:\Music"
+            Write-Host "    PS>" -NoNewline; Write-Host " ./flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/Musics" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " /mnt/sdb/MyMusic" -NoNewline; Write-Host " -l" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/flac.log" -NoNewline; Write-Host " -t" -ForegroundColor DarkGray -NoNewline; Write-Host " 8"
+            Write-Host "        Recompress all FLAC files from /home/Musics and save to /mnt/sdb/MyMusic. Export log to /home/flac.log and set 8 threads."
+            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " `"E:\Music\Artist - Title.flac`"" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " E:\Music\New.flac"
+            Write-Host "        Recompress E:\Music\Artist - Title.flac to E:\Music\New.flac."
+            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " Replace"
+            Write-Host "        Recompress all FLAC files from D:\ and replace them."
+        }
     }
     if ($WritePlace -match "s") {
         $WriteContent = "    " + $WriteContent
@@ -65,31 +96,58 @@ Write-Uniout "ls" "Center" $ScriptInfo[2].Replace("# ", "")
 Write-Uniout "ls" "Center" $ScriptInfo[4].Replace("# ", "")
 Write-Uniout "ls" "Center" $ScriptInfo[3].Replace("# Source: ", "")
 Write-Uniout "ls" "Divide"
+
+# Help
+if ( $h -or $help ) {
+    Write-Uniout "s" "Help"
+    exit 0
+}
+
 # No Paramater start
 if ( -not $InputPath ) { 
-    $InputPath = Read-Host "     Input file or folder path (-p)"
-    $OutputPath = Read-Host "    Output file or folder path (-o)"
+    Write-Uniout "s" "Info" "No prarmater start. Using -h or -help for help."
+    $InputPath = Read-Host "    Input file or folder path  (-p)"
+    if ( -not $OutputPath ) {
+        $OutputPath = Read-Host "    Output file or folder path (-o)"
+    }
 }
+
 # Initialize Paramaters
 if ( -not $InputPath ) { 
     Write-Uniout "ls" "Warning" "Unspecified Inputpath. Using $ScriptFolder as Inputpath."
     $InputPath = $ScriptFolder 
 }
 elseif ( -not (Test-Path $InputPath) ) {
-    Write-Uniout "ls" "Error" "Target File or Folder isn't existed."
+    Write-Uniout "ls" "Error" "Inputpath invaild or don't have permissions."
     exit 3
 }
-elseif ( $InputPath.EndsWith("\") ) { 
+if ( $InputPath.StartsWith(".\") -or $InputPath.StartsWith("./") ) {
+    $InputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InputPath)
+}
+if ( $InputPath.EndsWith("\") -or $InputPath.EndsWith("/") ) { 
     $InputPath = $InputPath.Remove($InputPath.Length - 1) 
 }
+
 if ( -not $OutputPath ) {
     Write-Uniout "ls" "Warning" "Unspecified Ouputpath. All recompressed file will output to the same folder and named as *_Recompress.flac"
     $FileSuffix = "_Recompressed.flac"
     $OutputPath = $InputPath
 }
-else {
+elseif ( -not (Test-Path $OutputPath) ) {
+    Write-Uniout "ls" "Error" "Outputpath invaild or don't have permissions."
+    exit 3
+}
+if ( $OutputPath.StartsWith(".\") -or $OutputPath.StartsWith("./") ) {
+    $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+}
+if ( $OutputPath.EndsWith("\") -or $OutputPath.EndsWith("/") ) { 
+    $OutputPath = $OutputPath.Remove($OutputPath.Length - 1) 
+}
+
+if ( -not $FileSuffix ) {
     $FileSuffix = ".flac"
 }
+
 if ( -not $RunspaceMax ) {
     $CoreNumber = [System.Environment]::ProcessorCount
     if ( $CoreNumber -ge 2 ) {
@@ -125,6 +183,7 @@ else {
     $OSDescription = [System.Environment]::OSVersion.VersionString
 }
 if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {
+    $FileSeparator = "\"
     switch ( $OSArchitecture ) {
         "X64" {
             $BinaryFLAC = "$ScriptFolder\bin\x64\flac.exe"
@@ -146,6 +205,7 @@ if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.R
     }
 }
 else {
+    $FileSeparator = "/"
     $BinaryFLAC = "flac"
     $BinaryMetaFLAC = "metaflac" 
     Write-Uniout "ls" "Verbose" "Detected Linux or macOS. Using your system FLAC binary."
@@ -161,7 +221,8 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
     $FileList = Get-ChildItem -Path $InputPath -Filter "*.flac" -Recurse -Exclude "*_Recompressed.flac" | Select-Object DirectoryName, Name, Length
-    if (-not $FileList) {
+    $FileCount = $FileList.Count
+    if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
     }
@@ -172,11 +233,11 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
     $aryIAsyncResult = New-Object System.Collections.ArrayList
     try {
         $FileList | ForEach-Object {
-            $FileSource = $_.DirectoryName + "\" + $_.Name
+            $FileSource = $_.DirectoryName + $FileSeparator + $_.Name
             $FileLengthOri = $_.Length
             $FileRelativePath = ($_.DirectoryName).Replace($InputPath, "")
             $FileName = ($_.Name).Replace(".flac", "")
-            $FileOutput = "$OutputPath" + "$FileRelativePath" + "\" + "$FileName" + "$FileSuffix"
+            $FileOutput = "$OutputPath" + "$FileRelativePath" + $FileSeparator + "$FileName" + "$FileSuffix"
             $FileOutputFolder = "$OutputPath" + "$FileRelativePath"
             if ( -not (Test-Path $FileOutputFolder) ) {
                 New-Item -Path $FileOutputFolder -ItemType Directory -Force | Out-Null
@@ -190,7 +251,18 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
                     [parameter(mandatory, position = 1)][string]$FileOutput,
                     [parameter(mandatory, position = 2)][string]$FileSource
                 )
-                & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource"
+                # For catch error
+                $ErrorActionPreference = 'Stop'
+                try {
+                    & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
+                    $PSSubResult = 1
+                }
+                catch {
+                    $PSSubResult = $Error[0]
+                }
+                finally {
+                    [string]$PSSubResult
+                }
             }
             $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddCommand("Out-String") | Out-Null
             $IASyncResult = $PSObject.BeginInvoke()
@@ -202,7 +274,13 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
                 $PSObject = $aryPowerShell[$i]
                 $IASyncResult = $aryIAsyncResult[$i]
                 if ($IASyncResult.IsCompleted -eq $true) {
-                    $AsyncResult = $PSObject.EndInvoke($IASyncResult)
+                    $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
+                    if ($AsyncResult -cmatch "WARNING:") {
+                        Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
+                    }
+                    elseif ($AsyncResult -cmatch "Error:") {
+                        Write-Uniout "ls" "Error" $AsyncResult.Replace("Error: ", "")
+                    }
                     $PSObject.Dispose()
                     $aryPowerShell.RemoveAt($i)
                     $aryIAsyncResult.RemoveAt($i)
@@ -210,6 +288,9 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
             }
             Start-Sleep -Seconds 1
         }
+    }
+    catch {
+        Write-Uniout "ls" "Error" $Error[0]
     }
     finally {
         $RunspacePool.Close()
@@ -228,9 +309,9 @@ else {
         else {
             $FileName = Split-Path -Path $FileSource -LeafBase
         }
-        $FileOutput = "$OutputPath" + "\" + "$FileName" + "$FileSuffix"
+        $FileOutput = "$OutputPath" + "$FileSeparator" + "$FileName" + "$FileSuffix"
     }
-    & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource"
+    & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1
 }
 Write-Uniout "ls" "Done" "Completed"
 # Notify for Windows
