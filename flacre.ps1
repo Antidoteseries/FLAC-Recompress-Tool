@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.3.0 Alpha
+# Version: 0.4.0 Alpha
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -18,50 +18,10 @@ param (
     [string]$t,
     [string]$thread
 )
-if ( $l ) { $LogFilePath = $l } else { $LogFilePath = $Log }
-if ( $o ) { $Output = $o } else { $Output = $output }
+if ( $l ) { $LogFilePath = $l } else { $LogFilePath = $log }
+if ( $o ) { $OutputPath = $o } else { $OutputPath = $output }
 if ( $p ) { $InputPath = $p } else { $InputPath = $path }
-if ( $t ) { $ThreadNumber = $t } else { $ThreadNumber = $thread }
-
-# Initialize Paramaters
-$ScriptPath = $MyInvocation.MyCommand.Definition
-$ScriptFolder = Split-Path -Parent $ScriptPath
-$PSVercode = $PSVersionTable.PSVersion.major
-if ( $PSVercode -lt 5 ) {
-    Write-Uniout "ls" "Info" "Error: PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
-    exit 1
-}
-if ( -not $LogFilePath ) {
-    $LogFilePath = $env:TEMP + "\FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
-}
-if ( -not $ThreadNumber ) {
-    $CoreNumber = [System.Environment]::ProcessorCount
-    if ( $CoreNumber -ge 2 ) {
-        $ThreadNumber = $CoreNumber - 1 
-    }
-}
-elseif ( $ThreadNumber -le 0 ) {
-    Write-Uniout "ls" "Info" "Error: Illegal Thread number"
-    exit 5
-}
-if ( -not $InputPath ) { 
-    $InputPath = $ScriptFolder 
-}
-elseif ( -not (Test-Path $InputPath) ) {
-    Write-Uniout "ls" "Info" "Error: Target File or Folder isn't existed."
-    exit 3
-}
-elseif ( $InputPath.EndsWith("\") ) { 
-    $InputPath = $InputPath.Remove($InputPath.Length - 1) 
-}
-if ( -not $Output ) {
-    $FileSuffix = "_Recompressed.flac"
-    $Output = $InputPath
-}
-else {
-    $FileSuffix = ".flac"
-}
-
+if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
 function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
     $WindowWidth = $host.UI.RawUI.WindowSize.Width
     $WindowHeight = $host.UI.RawUI.WindowSize.Height
@@ -70,10 +30,11 @@ function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
         "Verbose" { $WriteContent = "- " + $WriteContent }
         "Info" { $WriteContent = "> " + $WriteContent }
         "Warning" { $WriteContent = "Warning: " + $WriteContent; $WriteColor = "Yellow" }
-        "Error" { $WriteContent = "Error:   "; $WriteColor = "Red" }
+        "Error" { $WriteContent = "Error: " + $WriteContent; $WriteColor = "Red" }
         "Center" { $WriteContent = " " * (($WindowWidth - $WriteContent.Length) / 2 - 4) + $WriteContent }
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
+        "Done" { $WriteColor = "Green" }
     }
     if ($WritePlace -match "s") {
         $WriteContent = "    " + $WriteContent
@@ -82,7 +43,17 @@ function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
     if ($WritePlace -match "l") {
         Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject $WriteContent -Append
     }
+}
 
+$ScriptPath = $MyInvocation.MyCommand.Definition
+$ScriptFolder = Split-Path -Parent $ScriptPath
+$PSVercode = $PSVersionTable.PSVersion.major
+if ( $PSVercode -lt 5 ) {
+    Write-Uniout "ls" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
+    exit 1
+}
+if ( -not $LogFilePath ) {
+    $LogFilePath = $env:TEMP + "\FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
 }
 
 Clear-Host
@@ -94,7 +65,41 @@ Write-Uniout "ls" "Center" $ScriptInfo[2].Replace("# ", "")
 Write-Uniout "ls" "Center" $ScriptInfo[4].Replace("# ", "")
 Write-Uniout "ls" "Center" $ScriptInfo[3].Replace("# Source: ", "")
 Write-Uniout "ls" "Divide"
-Write-Uniout "ls" "Info" "Detecting and Optimization enviroument"
+# No Paramater start
+if ( -not $InputPath ) { 
+    $InputPath = Read-Host "     Input file or folder path (-p)"
+    $OutputPath = Read-Host "    Output file or folder path (-o)"
+}
+# Initialize Paramaters
+if ( -not $InputPath ) { 
+    Write-Uniout "ls" "Warning" "Unspecified Inputpath. Using $ScriptFolder as Inputpath."
+    $InputPath = $ScriptFolder 
+}
+elseif ( -not (Test-Path $InputPath) ) {
+    Write-Uniout "ls" "Error" "Target File or Folder isn't existed."
+    exit 3
+}
+elseif ( $InputPath.EndsWith("\") ) { 
+    $InputPath = $InputPath.Remove($InputPath.Length - 1) 
+}
+if ( -not $OutputPath ) {
+    Write-Uniout "ls" "Warning" "Unspecified Ouputpath. All recompressed file will output to the same folder and named as *_Recompress.flac"
+    $FileSuffix = "_Recompressed.flac"
+    $OutputPath = $InputPath
+}
+else {
+    $FileSuffix = ".flac"
+}
+if ( -not $RunspaceMax ) {
+    $CoreNumber = [System.Environment]::ProcessorCount
+    if ( $CoreNumber -ge 2 ) {
+        $RunspaceMax = [int]( $CoreNumber / 2 )
+    }
+}
+elseif ( $RunspaceMax -le 0 ) {
+    Write-Uniout "ls" "Error" "Illegal Thread number"
+    exit 5
+}
 
 # Detect OS and Architecture
 if ( $PSVersionTable.PSEdition -eq "Core" ) {
@@ -145,63 +150,76 @@ else {
     $BinaryMetaFLAC = "metaflac" 
     Write-Uniout "ls" "Verbose" "Detected Linux or macOS. Using your system FLAC binary."
 }
+Write-Uniout "l" "Verbose" "$OSArchitecture"
+Write-Uniout "l" "Verbose" "$OSDescription"
 
 if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d" ) {
     # Folder Mode
-    if ( $Output -match "\.flac" ) {
+    if ( $OutputPath -match "\.flac" ) {
         Write-Uniout "ls" "Error" "Invaild Output folder"
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path $ScriptFolder -Filter "*.flac" -Recurse | Select-Object DirectoryName, Name, Length 
+    $FileList = Get-ChildItem -Path $InputPath -Filter "*.flac" -Recurse -Exclude "*_Recompressed.flac" | Select-Object DirectoryName, Name, Length
     if (-not $FileList) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
     }
-    $FileList | ForEach-Object {
-        $FileSource = $_.DirectoryName + "\" + $_.Name
-        $FileRelativePath = ($_.DirectoryName).Replace($InputPath, "")
-        $FileName = ($_.Name).Replace(".flac", "")
-        $FileOutput = "$Output" + "$FileRelativePath" + "\" + "$FileName" + "$FileSuffix"
-        $FileOutputFolder = "$Output" + "$FileRelativePath"
-        if ( -not (Test-Path $FileOutputFolder) ) {
-            New-Item -Path $FileOutputFolder -ItemType Directory -Force >null
+    Write-Uniout "ls" "Info" "Starting compress"
+    $RunspacePool = [RunspaceFactory]::CreateRunspacePool(1, $RunspaceMax)
+    $RunspacePool.Open()
+    $aryPowerShell = New-Object System.Collections.ArrayList
+    $aryIAsyncResult = New-Object System.Collections.ArrayList
+    try {
+        $FileList | ForEach-Object {
+            $FileSource = $_.DirectoryName + "\" + $_.Name
+            $FileLengthOri = $_.Length
+            $FileRelativePath = ($_.DirectoryName).Replace($InputPath, "")
+            $FileName = ($_.Name).Replace(".flac", "")
+            $FileOutput = "$OutputPath" + "$FileRelativePath" + "\" + "$FileName" + "$FileSuffix"
+            $FileOutputFolder = "$OutputPath" + "$FileRelativePath"
+            if ( -not (Test-Path $FileOutputFolder) ) {
+                New-Item -Path $FileOutputFolder -ItemType Directory -Force | Out-Null
+            }
+            $PSObject = [PowerShell]::Create()
+            $PSObject.RunspacePool = $RunspacePool
+            $PSSubScript = {
+                [CmdletBinding()]
+                param(
+                    [parameter(mandatory, position = 0)][string]$BinaryFLAC,
+                    [parameter(mandatory, position = 1)][string]$FileOutput,
+                    [parameter(mandatory, position = 2)][string]$FileSource
+                )
+                & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource"
+            }
+            $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddCommand("Out-String") | Out-Null
+            $IASyncResult = $PSObject.BeginInvoke()
+            $aryPowerShell.Add($PSObject) | Out-Null
+            $aryIAsyncResult.Add($IASyncResult) | Out-Null
         }
-        if ( $ThreadNumber -eq 1 ) {
-            & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource"
-            Write-Host "$FileSource"(Get-ChildItem "$FileOutput").Length
-        }
-        else {
-            $JobScriptBlock = [scriptblock]::Create("
-                $BinaryFLAC -fsw8 -V -o '$FileOutput' '$FileSource'
-                Write-Host '$FileSource'(Get-ChildItem '$FileOutput').Length")
-            Start-Job -ScriptBlock $JobScriptBlock >null
-            while ( (Get-Job).count -eq $ThreadNumber ) {
-                Start-Sleep 1
-                foreach ( $Job in Get-Job ) {
-                    if ( $Job.State -eq "Completed" ) {
-                        Receive-Job $Job
-                        Remove-Job $Job
-                    }
+        while ($aryPowerShell.Count -gt 0) {
+            for ($i = 0; $i -lt $aryPowerShell.Count; $i++) {
+                $PSObject = $aryPowerShell[$i]
+                $IASyncResult = $aryIAsyncResult[$i]
+                if ($IASyncResult.IsCompleted -eq $true) {
+                    $AsyncResult = $PSObject.EndInvoke($IASyncResult)
+                    $PSObject.Dispose()
+                    $aryPowerShell.RemoveAt($i)
+                    $aryIAsyncResult.RemoveAt($i)
                 }
             }
-        }   
-    }
-    while ( (Get-Job).count -gt 0 ) {
-        Start-Sleep 1
-        foreach ( $Job in Get-Job ) {
-            if ( $Job.State -eq "Completed" ) {
-                Receive-Job $Job
-                Remove-Job $Job
-            }
+            Start-Sleep -Seconds 1
         }
-    }   
+    }
+    finally {
+        $RunspacePool.Close()
+    }
 }
 else {
     # Single File Mode
     $FileSource = $InputPath
-    if ( $Output -match "\.flac" ) {
-        $FileOutput = "$Output"
+    if ( $OutputPath -match "\.flac" ) {
+        $FileOutput = "$OutputPath"
     }
     else {
         if ( $PSVercode -le 5 ) {
@@ -210,9 +228,21 @@ else {
         else {
             $FileName = Split-Path -Path $FileSource -LeafBase
         }
-        $FileOutput = "$Output" + "\" + "$FileName" + "$FileSuffix"
+        $FileOutput = "$OutputPath" + "\" + "$FileName" + "$FileSuffix"
     }
-   
     & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource"
 }
-Write-Uniout "ls" "Info" "Completed"
+Write-Uniout "ls" "Done" "Completed"
+# Notify for Windows
+if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {  
+    [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null
+    $Notify = New-Object System.Windows.Forms.NotifyIcon
+    $PSHostPath = Get-Process -id $pid | Select-Object -ExpandProperty Path
+    $PSIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($PSHostPath)
+    $Notify.Icon = $PSIcon
+    $Notify.BalloonTipTitle = "FLAC Recompress Tool"
+    $Notify.BalloonTipIcon = "Info"
+    $Notify.BalloonTipText = "Completed"
+    $Notify.Visible = $true
+    $Notify.ShowBalloonTip(5000)
+}

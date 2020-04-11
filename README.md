@@ -25,8 +25,10 @@ By default, Microsoft disabled PowerShell script execution on Windows. You can u
 
 `Set-ExecutionPolicy -ExecutionPolicy Unrestricted`
 
-And of course, you can using 
+And you can use
 
 `Set-ExecutionPolicy -ExecutionPolicy Restricted`
 
 to disable it again.
+
+Binary files from https://xiph.org/flac. 
