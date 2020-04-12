@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.7.4 Beta
+# Version: 0.7.5 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -299,7 +299,7 @@ if ( Test-Path $InputPath -PathType Container ) {
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "^Recompressed$") } | Select-Object DirectoryName, Name, Length
+    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed$") } | Select-Object DirectoryName, Name, Length
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
@@ -307,7 +307,7 @@ if ( Test-Path $InputPath -PathType Container ) {
 }
 else {
     $FolderMode = $false
-    $FileList = Get-Item -Path "$InputPath" | Select-Object DirectoryName, Name, Length
+    $FileList = Get-Item -Path "$InputPath"
 }
 $FileCount = $FileList.Count
 $ErrorCount = 0
@@ -401,8 +401,8 @@ try {
                         Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
                     }
                 }
-                elseif ( $AsyncResult -cmatch "Error:" ) {
-                    Write-Uniout "ls" "Error" $AsyncResult.Replace("Error: ", "")
+                elseif ( $AsyncResult -cmatch "ERROR:" ) {
+                    Write-Uniout "ls" "Error" $AsyncResult.Replace("ERROR: ", "")
                     $ErrorCount++
                 }
                 else {
@@ -410,14 +410,14 @@ try {
                     [int]$FileLength = ($AsyncResult -split "\|")[1]
                     [int]$FileSaveSpace = ($AsyncResult -split "\|")[2]
                     if ($FileSaveSpace -gt 0) {
-                        $FileSaveSpaceOutput = "Saved " + (Get-FriendlySpace $FileSaveSpace)
+                        $FileSaveSpaceOutput = "-Saved " + (Get-FriendlySpace $FileSaveSpace) + "-"
                     }
                     else {
                         $FileSaveSpaceOutput = "No space saved."
                     }
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
-                    Write-Uniout "ls" "File" ("    - File: " + "$FileName" + ".flac Size: " + (Get-FriendlySpace $FileLength) + "   ") "$FileSaveSpaceOutput"
+                    Write-Uniout "ls" "File" ("    - File: " + "$FileName" + ".flac Size: " + (Get-FriendlySpace $FileLength) + " ") "$FileSaveSpaceOutput"
                 }
                 $PSObject.Dispose()
                 $aryPowerShell.RemoveAt($i)
@@ -429,9 +429,15 @@ try {
 }
 catch {
     Write-Uniout "ls" "Error" $Error[0]
+    $ErrorReasonGet = $true
     exit 1
 }
 finally {
+    if (($DoneCount + $ErrorCount) -ne $FileCount) {
+        if (-not $ErrorReasonGet) {
+            Write-Uniout "ls" "Error" "Exit abnormally."
+        }
+    }
     $RunspacePool.Close()
 }
 
