@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.5.0 Alpha
+# Version: 0.6.0 Alpha
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -26,7 +26,12 @@ if ( $p ) { $InputPath = $p } else { $InputPath = $path }
 if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
 if ( $s ) { $FileSuffix = $t } else { $FileSuffix = $suffix }
 
-function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
+function Write-Uniout {
+    param ( 
+        $WritePlace, 
+        $WriteType,
+        $WriteContent 
+    )
     $WindowWidth = $host.UI.RawUI.WindowSize.Width
     $WindowHeight = $host.UI.RawUI.WindowSize.Height
     $WriteColor = $host.UI.RawUI.ForegroundColor
@@ -35,7 +40,9 @@ function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
         "Verbose" { $WriteContent = "- " + $WriteContent }
         "Info" { $WriteContent = "> " + $WriteContent }
         "Warning" { $WriteContent = "Warning: " + $WriteContent; $WriteColor = "Yellow" }
+        "WarningN" { $WriteColor = "Yellow" }
         "Error" { $WriteContent = "Error: " + $WriteContent; $WriteColor = "Red" }
+        "ErrorN" { $WriteColor = "Red" }
         "Center" { $WriteContent = " " * (($WindowWidth - $WriteContent.Length) / 2 - 4) + $WriteContent }
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
@@ -73,6 +80,26 @@ function Write-Uniout ( $WritePlace, $WriteType, $WriteContent ) {
     }
     if ($WritePlace -match "l") {
         Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject $WriteContent -Append
+    }
+}
+
+# Notify for Windows
+function Write-Notify {
+    param (
+        $NotifyType,
+        $NotifyContent
+    )
+    if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {  
+        [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null
+        $Notify = New-Object System.Windows.Forms.NotifyIcon
+        $PSHostPath = Get-Process -id $pid | Select-Object -ExpandProperty Path
+        $PSIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($PSHostPath)
+        $Notify.Icon = $PSIcon
+        $Notify.BalloonTipTitle = "FLAC Recompress Tool"
+        $Notify.BalloonTipIcon = "$NotifyType"
+        $Notify.BalloonTipText = "$NotifyContent"
+        $Notify.Visible = $true
+        $Notify.ShowBalloonTip(5000)
     }
 }
 
@@ -133,10 +160,6 @@ if ( -not $OutputPath ) {
     $FileSuffix = "_Recompressed.flac"
     $OutputPath = $InputPath
 }
-elseif ( -not (Test-Path $OutputPath) ) {
-    Write-Uniout "ls" "Error" "Outputpath invaild or don't have permissions."
-    exit 3
-}
 if ( $OutputPath.StartsWith(".\") -or $OutputPath.StartsWith("./") ) {
     $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
 }
@@ -149,6 +172,7 @@ if ( -not $FileSuffix ) {
 }
 
 if ( -not $RunspaceMax ) {
+    Write-Uniout "s" "Info" "Detecting Performance"
     $CoreNumber = [System.Environment]::ProcessorCount
     if ( $CoreNumber -ge 2 ) {
         $RunspaceMax = [int]( $CoreNumber / 2 )
@@ -213,7 +237,7 @@ else {
 Write-Uniout "l" "Verbose" "$OSArchitecture"
 Write-Uniout "l" "Verbose" "$OSDescription"
 
-if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d" ) {
+if ( Test-Path $InputPath -PathType Container ) {
     # Folder Mode
     if ( $OutputPath -match "\.flac" ) {
         Write-Uniout "ls" "Error" "Invaild Output folder"
@@ -222,6 +246,9 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
     Write-Uniout "ls" "Info" "Getting Filelist"
     $FileList = Get-ChildItem -Path $InputPath -Filter "*.flac" -Recurse -Exclude "*_Recompressed.flac" | Select-Object DirectoryName, Name, Length
     $FileCount = $FileList.Count
+    $ErrorCount = 0
+    $DoneCount = 0
+    $FileSaveSpaceAll = 0
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
@@ -229,9 +256,9 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
     Write-Uniout "ls" "Info" "Starting compress"
     $RunspacePool = [RunspaceFactory]::CreateRunspacePool(1, $RunspaceMax)
     $RunspacePool.Open()
-    $aryPowerShell = New-Object System.Collections.ArrayList
-    $aryIAsyncResult = New-Object System.Collections.ArrayList
     try {
+        $aryPowerShell = New-Object System.Collections.ArrayList
+        $aryIAsyncResult = New-Object System.Collections.ArrayList
         $FileList | ForEach-Object {
             $FileSource = $_.DirectoryName + $FileSeparator + $_.Name
             $FileLengthOri = $_.Length
@@ -249,13 +276,16 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
                 param(
                     [parameter(mandatory, position = 0)][string]$BinaryFLAC,
                     [parameter(mandatory, position = 1)][string]$FileOutput,
-                    [parameter(mandatory, position = 2)][string]$FileSource
+                    [parameter(mandatory, position = 2)][string]$FileSource,
+                    [parameter(mandatory, position = 3)][string]$FileName,
+                    [parameter(mandatory, position = 4)][string]$FileLengthOri
                 )
                 # For catch error
                 $ErrorActionPreference = 'Stop'
                 try {
                     & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
-                    $PSSubResult = 1
+                    $FileSaveSpace = $FileLengthOri - (Get-Item $FileOutput | Select-Object -ExpandProperty Length)
+                    $PSSubResult = "$FileName" + "|" + "$FileSaveSpace"
                 }
                 catch {
                     $PSSubResult = $Error[0]
@@ -264,22 +294,56 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
                     [string]$PSSubResult
                 }
             }
-            $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddCommand("Out-String") | Out-Null
+            $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri) | Out-Null
             $IASyncResult = $PSObject.BeginInvoke()
             $aryPowerShell.Add($PSObject) | Out-Null
             $aryIAsyncResult.Add($IASyncResult) | Out-Null
         }
+       
         while ($aryPowerShell.Count -gt 0) {
+            $ProgressPercent = '{0:n0}' -f ((($DoneCount + 1) / $FileCount) * 100)
+            $ProgressFileCount = "File " + '{0:n0}' -f ($DoneCount + 1) + "/" + '{0:n0}' -f $FileCount
+            Write-Progress -Activity "Compressing" -Status "$ProgressPercent% Complete:" -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
             for ($i = 0; $i -lt $aryPowerShell.Count; $i++) {
                 $PSObject = $aryPowerShell[$i]
                 $IASyncResult = $aryIAsyncResult[$i]
                 if ($IASyncResult.IsCompleted -eq $true) {
                     $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
                     if ($AsyncResult -cmatch "WARNING:") {
-                        Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
+                        if ($AsyncResult -cmatch "is not an Ogg FLAC file; treating as a raw file") {
+                            Write-Uniout "ls" "Error" $AsyncResult.Replace("WARNING: ", "").Replace("is not an Ogg FLAC file; treating as a raw file", "is not a vaild FLAC file")
+                            $ErrorCount++
+                        }
+                        else {
+                            Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
+                        }
                     }
                     elseif ($AsyncResult -cmatch "Error:") {
                         Write-Uniout "ls" "Error" $AsyncResult.Replace("Error: ", "")
+                        $ErrorCount++
+                    }
+                    else {
+                        $FileName = ($AsyncResult -split "\|")[0]
+                        [int]$FileSaveSpace = ($AsyncResult -split "\|")[1]
+                        if ($FileSaveSpace -ge 1GB) {
+                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1GB)) + "GB"
+                        }
+                        elseif ($FileSaveSpace -ge 1MB) {
+                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1MB)) + "MB"
+                        }
+                        elseif ($FileSaveSpace -ge 1KB) {
+                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1KB)) + "KB"
+                        }
+                        elseif ($FileSaveSpace -gt 0) {
+                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f $FileSaveSpace ) + "B"
+                        }
+                        else {
+                            $FileSaveSpaceOutput = "No space saved."
+                        }
+                        $FileSaveSpaceAll += $FileSaveSpace
+                        $DoneCount++
+                        $FileSaveSpaceOutput = "File: " + "$FileName" + ".flac " + "$FileSaveSpaceOutput"
+                        Write-Uniout "ls" "Verbose" $FileSaveSpaceOutput
                     }
                     $PSObject.Dispose()
                     $aryPowerShell.RemoveAt($i)
@@ -291,6 +355,7 @@ if ( Get-Item $InputPath | Select-Object -ExpandProperty Mode | Select-String "d
     }
     catch {
         Write-Uniout "ls" "Error" $Error[0]
+        exit 1
     }
     finally {
         $RunspacePool.Close()
@@ -313,17 +378,35 @@ else {
     }
     & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1
 }
-Write-Uniout "ls" "Done" "Completed"
-# Notify for Windows
-if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {  
-    [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null
-    $Notify = New-Object System.Windows.Forms.NotifyIcon
-    $PSHostPath = Get-Process -id $pid | Select-Object -ExpandProperty Path
-    $PSIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($PSHostPath)
-    $Notify.Icon = $PSIcon
-    $Notify.BalloonTipTitle = "FLAC Recompress Tool"
-    $Notify.BalloonTipIcon = "Info"
-    $Notify.BalloonTipText = "Completed"
-    $Notify.Visible = $true
-    $Notify.ShowBalloonTip(5000)
+Write-Uniout "ls" "Info" "Compress Completed"
+if ($ErrorCount -eq 0) {
+    $EndMessage = "No error occurred."
+    Write-Uniout "ls" "Done" $EndMessage
+    Write-Notify "Info" $EndMessage
 }
+else {
+    if ($ErrorCount -eq 1) {
+        $EndMessage = "$ErrorCount file has an error."
+    }
+    else {
+        $EndMessage = "$ErrorCount files have errors."
+    }
+    Write-Uniout "ls" "WarningN" $EndMessage
+    Write-Notify "Warning" $EndMessage
+}
+if ($FileSaveSpaceAll -ge 1GB) {
+    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1GB)) + "GB"
+}
+elseif ($FileSaveSpaceAll -ge 1MB) {
+    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1MB)) + "MB"
+}
+elseif ($FileSaveSpaceAll -ge 1KB) {
+    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1KB)) + "KB"
+}
+elseif ($FileSaveSpaceAll -gt 0) {
+    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f $FileSaveSpaceAll ) + "B"
+}
+else {
+    $FileSaveSpaceAllOutput = "No space saved."
+}
+Write-Uniout "ls" "Done" "$FileSaveSpaceAllOutput"
