@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.7.3 Beta
+# Version: 0.7.4 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -48,7 +48,7 @@ function Write-Uniout {
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
         "Done" { $WriteColor = "Green" }
-        "File" { Write-Host "    - File: $WriteContent.flac " -NoNewline; Write-Host "$WriteAdditionalParam" -ForegroundColor Green; return }
+        "File" { Write-Host "$WriteContent" -NoNewline; Write-Host "$WriteAdditionalParam" -ForegroundColor Green; return }
         "Help" {
             Write-Host "    Usage:"
             Write-Host "        flacre " -ForegroundColor White -NoNewline; Write-Host "[options] -path [<inputpath>] -output [<outputpath>/Replace]`n"
@@ -268,7 +268,13 @@ if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
 else {
     $OutputReplace = $false
     if ( -not $OutputPath ) {
-        $OutputPath = "$InputPath" + "$FileSeparator" + "Recompressed"
+        if ("$InputPath" -match "\.flac") {
+            $OutputPath = ("$InputPath" -replace "\$FileSeparator[^/\\\?]+\.flac$") + "$FileSeparator" + "Recompressed"
+        }
+        else {
+            $OutputPath = "$InputPath" + "$FileSeparator" + "Recompressed"
+            
+        }
         Write-Uniout "ls" "Warning" "Unspecified Ouputpath. File will output to $OutputPath"
     }
     if ( $OutputPath.StartsWith(".\") -or $OutputPath.StartsWith("./") ) {
@@ -401,6 +407,7 @@ try {
                 }
                 else {
                     $FileName = ($AsyncResult -split "\|")[0]
+                    [int]$FileLength = ($AsyncResult -split "\|")[1]
                     [int]$FileSaveSpace = ($AsyncResult -split "\|")[2]
                     if ($FileSaveSpace -gt 0) {
                         $FileSaveSpaceOutput = "Saved " + (Get-FriendlySpace $FileSaveSpace)
@@ -410,7 +417,7 @@ try {
                     }
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
-                    Write-Uniout "ls" "File" "$FileName" "$FileSaveSpaceOutput"
+                    Write-Uniout "ls" "File" ("    - File: " + "$FileName" + ".flac Size: " + (Get-FriendlySpace $FileLength) + "   ") "$FileSaveSpaceOutput"
                 }
                 $PSObject.Dispose()
                 $aryPowerShell.RemoveAt($i)
@@ -445,7 +452,7 @@ else {
     Write-Notify "Warning" $EndMessage
 }
 if ($FileSaveSpaceAll -gt 0) {
-    $FileSaveSpaceAllOutput = "Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
+    $FileSaveSpaceAllOutput = "Compressed " + $DoneCount + " files. Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
 }
 else {
     $FileSaveSpaceAllOutput = "No space saved."
