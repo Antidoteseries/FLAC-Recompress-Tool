@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.6.0 Alpha
+# Version: 0.7.0 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -17,20 +17,21 @@ param (
     [string]$path,
     [string]$s,
     [string]$suffix,
-    [string]$t,
-    [string]$thread
+    [int]$t,
+    [int]$thread
 )
 if ( $l ) { $LogFilePath = $l } else { $LogFilePath = $log }
 if ( $o ) { $OutputPath = $o } else { $OutputPath = $output }
 if ( $p ) { $InputPath = $p } else { $InputPath = $path }
 if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
-if ( $s ) { $FileSuffix = $t } else { $FileSuffix = $suffix }
+if ( $s ) { $FileSuffix = $s } else { $FileSuffix = $suffix }
 
 function Write-Uniout {
     param ( 
         $WritePlace, 
         $WriteType,
-        $WriteContent 
+        $WriteContent,
+        $WriteAdditionalParam 
     )
     $WindowWidth = $host.UI.RawUI.WindowSize.Width
     $WindowHeight = $host.UI.RawUI.WindowSize.Height
@@ -47,6 +48,7 @@ function Write-Uniout {
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
         "Done" { $WriteColor = "Green" }
+        "File" { Write-Host "    - File: $WriteContent.flac " -NoNewline; Write-Host "$WriteAdditionalParam" -ForegroundColor Green; return }
         "Help" {
             Write-Host "    Usage:"
             Write-Host "        flacre " -ForegroundColor White -NoNewline; Write-Host "[options] -path [<inputpath>] -output [<outputpath>/Replace]`n"
@@ -66,12 +68,13 @@ function Write-Uniout {
             Write-Host "    Examples:"
             Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " C:\Users\Admin\Music" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\Music"
             Write-Host "        Recompress all FLAC files from C:\Users\Admin\Music and save to D:\Music"
-            Write-Host "    PS>" -NoNewline; Write-Host " ./flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/Musics" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " /mnt/sdb/MyMusic" -NoNewline; Write-Host " -l" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/flac.log" -NoNewline; Write-Host " -t" -ForegroundColor DarkGray -NoNewline; Write-Host " 8"
-            Write-Host "        Recompress all FLAC files from /home/Musics and save to /mnt/sdb/MyMusic. Export log to /home/flac.log and set 8 threads."
+            Write-Host "    PS>" -NoNewline; Write-Host " ./flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/Musics" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " /mnt/sdb/MyMusic" -NoNewline; Write-Host " -s" -ForegroundColor DarkGray -NoNewline; Write-Host " `"_cmp.flac`"" -NoNewline; Write-Host " -l" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/flac.log" -NoNewline; Write-Host " -t" -ForegroundColor DarkGray -NoNewline; Write-Host " 8"
+            Write-Host "        Recompress all FLAC files from /home/Musics and save to /mnt/sdb/MyMusic. All files will named to *_cmp.flac. Export log to /home/flac.log and set 8 threads."
             Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " `"E:\Music\Artist - Title.flac`"" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " E:\Music\New.flac"
             Write-Host "        Recompress E:\Music\Artist - Title.flac to E:\Music\New.flac."
             Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " Replace"
             Write-Host "        Recompress all FLAC files from D:\ and replace them."
+            return
         }
     }
     if ($WritePlace -match "s") {
@@ -103,15 +106,106 @@ function Write-Notify {
     }
 }
 
+function Get-FriendlySpace {
+    param ( $FileSpace )
+    if ( $FileSpace -ge 1TB ) {
+        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1TB)) + "TB"
+    }
+    elseif ( $FileSpace -ge 1GB ) {
+        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1GB)) + "GB"
+    }
+    elseif ( $FileSpace -ge 1MB ) {
+        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1MB)) + "MB"
+    }
+    elseif ( $FileSpace -ge 1KB ) {
+        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1KB)) + "KB"
+    }
+    elseif ( $FileSpace -gt 0 ) {
+        $FileFriendlySpace = ('{0:n2}' -f $FileSpace ) + "B"
+    }
+    return $FileFriendlySpace
+}
+
+# Detect System
 $ScriptPath = $MyInvocation.MyCommand.Definition
 $ScriptFolder = Split-Path -Parent $ScriptPath
 $PSVercode = $PSVersionTable.PSVersion.major
 if ( $PSVercode -lt 5 ) {
-    Write-Uniout "ls" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
+    Write-Uniout "s" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
     exit 1
 }
+Write-Uniout "s" "Info" "Detecting System for Performance"
+if ( $PSVersionTable.PSEdition -eq "Core" ) {
+    $OSArchitecture = [string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    $OSDescription = [string][System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+}
+else {
+    if ( [System.Environment]::Is64BitOperatingSystem ) {
+        $OSArchitecture = "X64"
+    }
+    # For Windows on ARM devices, Windows PowerShell always running on x86-compatible mode.
+    elseif ( Test-Path "C:\Windows\SysArm32\cmd.exe" ) {
+        if ( Test-Path "C:\Windows\SysWow64\cmd.exe" ) { 
+            $OSArchitecture = "Arm64"
+        }
+        else { 
+            $OSArchitecture = "Arm" 
+        }
+    }
+    else {
+        $OSArchitecture = "X86"
+    }
+    $OSDescription = [System.Environment]::OSVersion.VersionString
+}
+if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {
+    $FileSeparator = "\"
+    switch ( $OSArchitecture ) {
+        "X64" {
+            $BinaryFLAC = "$ScriptFolder\bin\x64\flac.exe"
+            $BinaryMetaFLAC = "$ScriptFolder\bin\x64\metaflac.exe" 
+        }
+        "X86" {
+            $BinaryFLAC = "$ScriptFolder\bin\x86\flac.exe"
+            $BinaryMetaFLAC = "$ScriptFolder\bin\x86\metaflac.exe" 
+        }
+        "Arm64" {
+            $BinaryFLAC = "$ScriptFolder\bin\x86\flac.exe"
+            $BinaryMetaFLAC = "$ScriptFolder\bin\x86\metaflac.exe" 
+            Write-Uniout "s" "Warning" "Detected ARM64 Devices. FLAC will running in x86-compatible mode."
+        }
+        "Arm" {
+            Write-Uniout "s" "Error" "Detected ARM Devices. Not support your device yet."
+            exit 2
+        }
+    }
+}
+else {
+    $env:TEMP = "/tmp"
+    $FileSeparator = "/"
+    $BinaryFLAC = "flac"
+    $BinaryMetaFLAC = "metaflac" 
+    Write-Uniout "s" "Verbose" "Detected Linux or macOS. Using your system FLAC binary."
+}
 if ( -not $LogFilePath ) {
-    $LogFilePath = $env:TEMP + "\FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
+    $LogFilePath = $env:TEMP + "$FileSeparator" + "FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
+}
+Write-Uniout "l" "Verbose" "$OSArchitecture"
+Write-Uniout "l" "Verbose" "$OSDescription"
+if ( -not $RunspaceMax ) {
+    $CoreNumber = [System.Environment]::ProcessorCount
+    if (( $OSArchitecture -eq "Arm" ) -or ( $OSArchitecture -eq "Arm64" )) {
+        $RunspaceMax = '{0:n0}' -f ($CoreNumber / 2) 
+    }
+    elseif ( $CoreNumber -ge 4 ) {
+        $RunspaceMax = $CoreNumber - 2 
+    }
+    elseif ($CoreNumber -ge 2) {
+        $RunspaceMax = $CoreNumber - 1
+    }
+}
+elseif ( $RunspaceMax -le 0 ) {
+    Write-Uniout "ls" "Error" "Illegal Thread number"
+    exit 5
 }
 
 Clear-Host
@@ -155,87 +249,34 @@ if ( $InputPath.EndsWith("\") -or $InputPath.EndsWith("/") ) {
     $InputPath = $InputPath.Remove($InputPath.Length - 1) 
 }
 
-if ( -not $OutputPath ) {
-    Write-Uniout "ls" "Warning" "Unspecified Ouputpath. All recompressed file will output to the same folder and named as *_Recompress.flac"
-    $FileSuffix = "_Recompressed.flac"
-    $OutputPath = $InputPath
+if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
+    $OutputPath = $env:TEMP + "$FileSeparator" + "Recompressed"
+    $OutputReplace = $true
+    if ( $FileSuffix ) {
+        Write-Uniout "ls" "Warning" "File suffix can not using in Replace mode."
+        $FileSuffix = ".flac"
+    }
 }
-if ( $OutputPath.StartsWith(".\") -or $OutputPath.StartsWith("./") ) {
-    $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
-}
-if ( $OutputPath.EndsWith("\") -or $OutputPath.EndsWith("/") ) { 
-    $OutputPath = $OutputPath.Remove($OutputPath.Length - 1) 
+else {
+    $OutputReplace = $false
+    if ( -not $OutputPath ) {
+        $OutputPath = "$InputPath" + "$FileSeparator" + "Recompressed"
+        Write-Uniout "ls" "Warning" "Unspecified Ouputpath. File will output to $OutputPath"
+    }
+    if ( $OutputPath.StartsWith(".\") -or $OutputPath.StartsWith("./") ) {
+        $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    }
+    if ( $OutputPath.EndsWith("\") -or $OutputPath.EndsWith("/") ) { 
+        $OutputPath = $OutputPath.Remove($OutputPath.Length - 1) 
+    }
 }
 
 if ( -not $FileSuffix ) {
     $FileSuffix = ".flac"
 }
-
-if ( -not $RunspaceMax ) {
-    Write-Uniout "s" "Info" "Detecting Performance"
-    $CoreNumber = [System.Environment]::ProcessorCount
-    if ( $CoreNumber -ge 2 ) {
-        $RunspaceMax = [int]( $CoreNumber / 2 )
-    }
+if ( -not ( $FileSuffix -match "\.flac" )) {
+    $FileSuffix += ".flac"
 }
-elseif ( $RunspaceMax -le 0 ) {
-    Write-Uniout "ls" "Error" "Illegal Thread number"
-    exit 5
-}
-
-# Detect OS and Architecture
-if ( $PSVersionTable.PSEdition -eq "Core" ) {
-    $OSArchitecture = [string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    $OSDescription = [string][System.Runtime.InteropServices.RuntimeInformation]::OSDescription
-}
-else {
-    if ( [System.Environment]::Is64BitOperatingSystem ) {
-        $OSArchitecture = "X64"
-    }
-    # For Windows on ARM devices, Windows PowerShell always running on x86-compatible mode.
-    elseif ( Test-Path "C:\Windows\SysArm32\cmd.exe" ) {
-        if ( Test-Path "C:\Windows\SysWow64\cmd.exe" ) { 
-            $OSArchitecture = "Arm64"
-        }
-        else { 
-            $OSArchitecture = "Arm" 
-        }
-    }
-    else {
-        $OSArchitecture = "X86"
-    }
-    $OSDescription = [System.Environment]::OSVersion.VersionString
-}
-if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {
-    $FileSeparator = "\"
-    switch ( $OSArchitecture ) {
-        "X64" {
-            $BinaryFLAC = "$ScriptFolder\bin\x64\flac.exe"
-            $BinaryMetaFLAC = "$ScriptFolder\bin\x64\metaflac.exe" 
-        }
-        "X86" {
-            $BinaryFLAC = "$ScriptFolder\bin\x86\flac.exe"
-            $BinaryMetaFLAC = "$ScriptFolder\bin\x86\metaflac.exe" 
-        }
-        "Arm64" {
-            $BinaryFLAC = "$ScriptFolder\bin\x86\flac.exe"
-            $BinaryMetaFLAC = "$ScriptFolder\bin\x86\metaflac.exe" 
-            Write-Uniout "ls" "Warning" "Detected ARM64 Devices. FLAC will running in x86-compatible mode."
-        }
-        "Arm" {
-            Write-Uniout "ls" "Error" "Detected ARM Devices. Not support your device yet."
-            exit 2
-        }
-    }
-}
-else {
-    $FileSeparator = "/"
-    $BinaryFLAC = "flac"
-    $BinaryMetaFLAC = "metaflac" 
-    Write-Uniout "ls" "Verbose" "Detected Linux or macOS. Using your system FLAC binary."
-}
-Write-Uniout "l" "Verbose" "$OSArchitecture"
-Write-Uniout "l" "Verbose" "$OSDescription"
 
 if ( Test-Path $InputPath -PathType Container ) {
     # Folder Mode
@@ -244,16 +285,17 @@ if ( Test-Path $InputPath -PathType Container ) {
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path $InputPath -Filter "*.flac" -Recurse -Exclude "*_Recompressed.flac" | Select-Object DirectoryName, Name, Length
+    $FileList = Get-ChildItem -Path $InputPath -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "^Recompressed$") } | Select-Object DirectoryName, Name, Length
     $FileCount = $FileList.Count
     $ErrorCount = 0
     $DoneCount = 0
     $FileSaveSpaceAll = 0
+    $TimeCount = Get-Date
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
     }
-    Write-Uniout "ls" "Info" "Starting compress"
+    Write-Uniout "ls" "Info" "Starting compress, please wait..."
     $RunspacePool = [RunspaceFactory]::CreateRunspacePool(1, $RunspaceMax)
     $RunspacePool.Open()
     try {
@@ -278,14 +320,19 @@ if ( Test-Path $InputPath -PathType Container ) {
                     [parameter(mandatory, position = 1)][string]$FileOutput,
                     [parameter(mandatory, position = 2)][string]$FileSource,
                     [parameter(mandatory, position = 3)][string]$FileName,
-                    [parameter(mandatory, position = 4)][string]$FileLengthOri
+                    [parameter(mandatory, position = 4)][string]$FileLengthOri,
+                    [parameter(mandatory, position = 5)][System.Boolean]$OutputReplace
                 )
                 # For catch error
                 $ErrorActionPreference = 'Stop'
                 try {
                     & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
-                    $FileSaveSpace = $FileLengthOri - (Get-Item $FileOutput | Select-Object -ExpandProperty Length)
-                    $PSSubResult = "$FileName" + "|" + "$FileSaveSpace"
+                    $FileLength = Get-Item $FileOutput | Select-Object -ExpandProperty Length
+                    $FileSaveSpace = $FileLengthOri - $FileLength
+                    if ( $OutputReplace ) {
+                        Move-Item -LiteralPath "$FileOutput" -Destination "$FileSource" -Force
+                    }
+                    $PSSubResult = "$FileName" + "|" + "$FileLength" + "|" + "$FileSaveSpace"
                 }
                 catch {
                     $PSSubResult = $Error[0]
@@ -294,23 +341,23 @@ if ( Test-Path $InputPath -PathType Container ) {
                     [string]$PSSubResult
                 }
             }
-            $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri) | Out-Null
+            $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace) | Out-Null
             $IASyncResult = $PSObject.BeginInvoke()
             $aryPowerShell.Add($PSObject) | Out-Null
             $aryIAsyncResult.Add($IASyncResult) | Out-Null
         }
-       
-        while ($aryPowerShell.Count -gt 0) {
-            $ProgressPercent = '{0:n0}' -f ((($DoneCount + 1) / $FileCount) * 100)
+        Start-Sleep 1
+        while ( $aryPowerShell.Count -gt 0 ) {
+            $ProgressPercent = '{0:n0}' -f (($DoneCount / $FileCount) * 100)
             $ProgressFileCount = "File " + '{0:n0}' -f ($DoneCount + 1) + "/" + '{0:n0}' -f $FileCount
             Write-Progress -Activity "Compressing" -Status "$ProgressPercent% Complete:" -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
-            for ($i = 0; $i -lt $aryPowerShell.Count; $i++) {
+            for ( $i = 0; $i -lt $aryPowerShell.Count; $i++ ) {
                 $PSObject = $aryPowerShell[$i]
                 $IASyncResult = $aryIAsyncResult[$i]
-                if ($IASyncResult.IsCompleted -eq $true) {
+                if ( $IASyncResult.IsCompleted -eq $true ) {
                     $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
-                    if ($AsyncResult -cmatch "WARNING:") {
-                        if ($AsyncResult -cmatch "is not an Ogg FLAC file; treating as a raw file") {
+                    if ( $AsyncResult -cmatch "WARNING:" ) {
+                        if ( $AsyncResult -cmatch "is not an Ogg FLAC file; treating as a raw file" ) {
                             Write-Uniout "ls" "Error" $AsyncResult.Replace("WARNING: ", "").Replace("is not an Ogg FLAC file; treating as a raw file", "is not a vaild FLAC file")
                             $ErrorCount++
                         }
@@ -318,32 +365,22 @@ if ( Test-Path $InputPath -PathType Container ) {
                             Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
                         }
                     }
-                    elseif ($AsyncResult -cmatch "Error:") {
+                    elseif ( $AsyncResult -cmatch "Error:" ) {
                         Write-Uniout "ls" "Error" $AsyncResult.Replace("Error: ", "")
                         $ErrorCount++
                     }
                     else {
                         $FileName = ($AsyncResult -split "\|")[0]
-                        [int]$FileSaveSpace = ($AsyncResult -split "\|")[1]
-                        if ($FileSaveSpace -ge 1GB) {
-                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1GB)) + "GB"
-                        }
-                        elseif ($FileSaveSpace -ge 1MB) {
-                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1MB)) + "MB"
-                        }
-                        elseif ($FileSaveSpace -ge 1KB) {
-                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f ($FileSaveSpace / 1KB)) + "KB"
-                        }
-                        elseif ($FileSaveSpace -gt 0) {
-                            $FileSaveSpaceOutput = "Saved " + ('{0:n2}' -f $FileSaveSpace ) + "B"
+                        [int]$FileSaveSpace = ($AsyncResult -split "\|")[2]
+                        if ($FileSaveSpace -gt 0) {
+                            $FileSaveSpaceOutput = "Saved " + (Get-FriendlySpace $FileSaveSpace)
                         }
                         else {
                             $FileSaveSpaceOutput = "No space saved."
                         }
                         $FileSaveSpaceAll += $FileSaveSpace
                         $DoneCount++
-                        $FileSaveSpaceOutput = "File: " + "$FileName" + ".flac " + "$FileSaveSpaceOutput"
-                        Write-Uniout "ls" "Verbose" $FileSaveSpaceOutput
+                        Write-Uniout "ls" "File" "$FileName" "$FileSaveSpaceOutput"
                     }
                     $PSObject.Dispose()
                     $aryPowerShell.RemoveAt($i)
@@ -385,7 +422,7 @@ if ($ErrorCount -eq 0) {
     Write-Notify "Info" $EndMessage
 }
 else {
-    if ($ErrorCount -eq 1) {
+    if ( $ErrorCount -eq 1 ) {
         $EndMessage = "$ErrorCount file has an error."
     }
     else {
@@ -394,19 +431,11 @@ else {
     Write-Uniout "ls" "WarningN" $EndMessage
     Write-Notify "Warning" $EndMessage
 }
-if ($FileSaveSpaceAll -ge 1GB) {
-    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1GB)) + "GB"
-}
-elseif ($FileSaveSpaceAll -ge 1MB) {
-    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1MB)) + "MB"
-}
-elseif ($FileSaveSpaceAll -ge 1KB) {
-    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f ($FileSaveSpaceAll / 1KB)) + "KB"
-}
-elseif ($FileSaveSpaceAll -gt 0) {
-    $FileSaveSpaceAllOutput = "Totally saved " + ('{0:n2}' -f $FileSaveSpaceAll ) + "B"
+if ($FileSaveSpaceAll -gt 0) {
+    $FileSaveSpaceAllOutput = "Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
 }
 else {
     $FileSaveSpaceAllOutput = "No space saved."
 }
 Write-Uniout "ls" "Done" "$FileSaveSpaceAllOutput"
+$TimeUse = (New-TimeSpan -Start $TimeCount -End (Get-Date)).TotalSeconds
