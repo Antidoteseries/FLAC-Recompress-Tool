@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.7.5 Beta
+# Version: 0.8.0 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -26,6 +26,8 @@ if ( $p ) { $InputPath = $p } else { $InputPath = $path }
 if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
 if ( $s ) { $FileSuffix = $s } else { $FileSuffix = $suffix }
 
+$WindowWidth = [System.Console]::BufferWidth 
+$WindowHeight = [System.Console]::BufferHeight
 function Write-Uniout {
     param ( 
         $WritePlace, 
@@ -33,9 +35,8 @@ function Write-Uniout {
         $WriteContent,
         $WriteAdditionalParam 
     )
-    $WindowWidth = $host.UI.RawUI.WindowSize.Width
-    $WindowHeight = $host.UI.RawUI.WindowSize.Height
-    $WriteColor = $host.UI.RawUI.ForegroundColor
+    
+    $WriteColor = "White" # $host.UI.RawUI.ForegroundColor can not using in Linux
     switch ( $WriteType ) {
         "Output" { }
         "Verbose" { $WriteContent = "- " + $WriteContent }
@@ -44,14 +45,14 @@ function Write-Uniout {
         "WarningN" { $WriteColor = "Yellow" }
         "Error" { $WriteContent = "Error: " + $WriteContent; $WriteColor = "Red" }
         "ErrorN" { $WriteColor = "Red" }
-        "Center" { $WriteContent = " " * (($WindowWidth - $WriteContent.Length) / 2 - 4) + $WriteContent }
+        "Center" { [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + [int](($WindowWidth - $WriteContent.Length) / 2 - 4)), [System.Console]::CursorTop) }
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
         "Empty" { $WriteContent = "" }
         "Done" { $WriteColor = "Green" }
-        "File" { Write-Host "$WriteContent" -NoNewline; Write-Host "$WriteAdditionalParam" -ForegroundColor Green; return }
         "Help" {
+            Write-Host ""
             Write-Host "    Usage:"
-            Write-Host "        flacre " -ForegroundColor White -NoNewline; Write-Host "[options] -path [<inputpath>] -output [<outputpath>/Replace]`n"
+            Write-Host "        flacre " -ForegroundColor White -NoNewline; Write-Host "[options] -path [<inputpath>] -output [<outputpath>/Replace]`n" -ForegroundColor Gray
             Write-Host "    Options:"
             Write-Host "    -p, -path" -ForegroundColor Yellow -NoNewline; Write-Host " <path>" -ForegroundColor Green
             Write-Host "        Input option. The argument must be existd. Support file and folder. When you input a folder, we will search all FLAC files in the folder and sub-folders."
@@ -66,24 +67,40 @@ function Write-Uniout {
             Write-Host "    -h, -help" -ForegroundColor Yellow
             Write-Host "        Display the help.`n"
             Write-Host "    Examples:"
-            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " C:\Users\Admin\Music" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\Music"
+            Write-Host "    PS>" -NoNewline; Write-Host " flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " C:\Users\Admin\Music" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\Music"
             Write-Host "        Recompress all FLAC files from C:\Users\Admin\Music and save to D:\Music"
-            Write-Host "    PS>" -NoNewline; Write-Host " ./flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/Musics" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " /mnt/sdb/MyMusic" -NoNewline; Write-Host " -s" -ForegroundColor DarkGray -NoNewline; Write-Host " `"_cmp.flac`"" -NoNewline; Write-Host " -l" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/flac.log" -NoNewline; Write-Host " -t" -ForegroundColor DarkGray -NoNewline; Write-Host " 8"
+            Write-Host "    PS>" -NoNewline; Write-Host " flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/Musics" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " /mnt/sdb/MyMusic" -NoNewline; Write-Host " -s" -ForegroundColor DarkGray -NoNewline; Write-Host " `"_cmp.flac`"" -NoNewline; Write-Host " -l" -ForegroundColor DarkGray -NoNewline; Write-Host " /home/flac.log" -NoNewline; Write-Host " -t" -ForegroundColor DarkGray -NoNewline; Write-Host " 8"
             Write-Host "        Recompress all FLAC files from /home/Musics and save to /mnt/sdb/MyMusic. All files will named to *_cmp.flac. Export log to /home/flac.log and set 8 threads."
-            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " `"E:\Music\Artist - Title.flac`"" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " E:\Music\New.flac"
+            Write-Host "    PS>" -NoNewline; Write-Host " flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " `"E:\Music\Artist - Title.flac`"" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " E:\Music\New.flac"
             Write-Host "        Recompress E:\Music\Artist - Title.flac to E:\Music\New.flac."
-            Write-Host "    PS>" -NoNewline; Write-Host " .\flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " Replace"
+            Write-Host "    PS>" -NoNewline; Write-Host " flacre" -ForegroundColor Yellow -NoNewline; Write-Host " -p" -ForegroundColor DarkGray -NoNewline; Write-Host " D:\" -NoNewline; Write-Host " -o" -ForegroundColor DarkGray -NoNewline; Write-Host " Replace"
             Write-Host "        Recompress all FLAC files from D:\ and replace them."
             return
         }
     }
     if ($WritePlace -match "s") {
-        $WriteContent = "    " + $WriteContent
-        Write-Host -ForegroundColor $WriteColor $WriteContent
+        Write-Host $WriteContent  -ForegroundColor $WriteColor 
+        [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + 4 ), [System.Console]::CursorTop )
     }
     if ($WritePlace -match "l") {
         Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject $WriteContent -Append
     }
+}
+
+$ProgressLine = $WindowHeight - 5
+function Write-Progress2 {
+    param (
+        [int]$PercentCompleted,
+        [string]$CurrentOperation
+    )
+    $ProgressLineStart = [System.Console]::CursorTop
+    [System.Console]::SetCursorPosition(4, $ProgressLine - 1)
+    Write-Host ([string]$PercentCompleted + "% Completed:"); [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
+    $ProgressStringCount = [int](( $WindowWidth - 10) * ($PercentCompleted / 100))
+    $ProgressString = "[" + "o" * $ProgressStringCount + " " * ($WindowWidth - 10 - $ProgressStringCount ) + "]"
+    Write-Host $ProgressString ; [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
+    Write-Host $CurrentOperation; [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
+    [System.Console]::SetCursorPosition(4, $ProgressLineStart )
 }
 
 # Notify for Windows
@@ -126,7 +143,7 @@ function Get-FriendlySpace {
     return $FileFriendlySpace
 }
 
-# Detect System
+# Getting script infomation
 $ScriptPath = $MyInvocation.MyCommand.Definition
 $ScriptFolder = Split-Path -Parent $ScriptPath
 $PSVercode = $PSVersionTable.PSVersion.major
@@ -134,7 +151,27 @@ if ( $PSVercode -lt 5 ) {
     Write-Uniout "s" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
     exit 1
 }
-Write-Uniout "s" "Info" "Detecting System for Performance"
+
+# Title
+Clear-Host
+$LogEnabled = $true
+$ScriptTitle = "FLAC Recompress Tool"
+$ScriptInfo = Get-content -Path $ScriptPath -TotalCount 6
+$host.UI.RawUI.WindowTitle = $ScriptTitle
+[System.Console]::SetCursorPosition(4, 1)
+Write-Uniout "s" "Center" ($ScriptTitle + $ScriptInfo[5].Replace("# Version:", ""))
+Write-Uniout "s" "Center" $ScriptInfo[2].Replace("# ", "")
+Write-Uniout "s" "Center" $ScriptInfo[4].Replace("# ", "")
+Write-Uniout "s" "Center" $ScriptInfo[3].Replace("# Source: ", "")
+Write-Uniout "s" "Divide"
+
+# Help
+if ( $h -or $help ) {
+    Write-Uniout "s" "Help"
+    exit 0
+}
+
+# Detect System
 if ( $PSVersionTable.PSEdition -eq "Core" ) {
     $OSArchitecture = [string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
     $OSDescription = [string][System.Runtime.InteropServices.RuntimeInformation]::OSDescription
@@ -190,7 +227,7 @@ else {
         Write-Uniout "s" "Verbose" "Detected Linux or macOS. Use system FLAC binary."
     }
     else {
-        Write-Uniout "ls" "Error" "Detected Linux or macOS and missing FLAC binary. You can install FLAC by package manager."
+        Write-Uniout "s" "Error" "Detected Linux or macOS and missing FLAC binary. You can install FLAC by package manager."
         exit 6
     }
 }
@@ -214,22 +251,6 @@ if ( -not $RunspaceMax ) {
 elseif ( $RunspaceMax -le 0 ) {
     Write-Uniout "ls" "Error" "Illegal Thread number"
     exit 5
-}
-
-Clear-Host
-$ScriptInfo = Get-content -Path $ScriptPath -TotalCount 6
-$host.UI.RawUI.WindowTitle = "FLAC Recompress Tool"
-Write-Uniout "s" "Empty"
-Write-Uniout "ls" "Center" ("FLAC Recompress Tool" + $ScriptInfo[5].Replace("# Version:", ""))
-Write-Uniout "ls" "Center" $ScriptInfo[2].Replace("# ", "")
-Write-Uniout "ls" "Center" $ScriptInfo[4].Replace("# ", "")
-Write-Uniout "ls" "Center" $ScriptInfo[3].Replace("# Source: ", "")
-Write-Uniout "ls" "Divide"
-
-# Help
-if ( $h -or $help ) {
-    Write-Uniout "s" "Help"
-    exit 0
 }
 
 # No Paramater start
@@ -292,24 +313,26 @@ if ( -not ( $FileSuffix -match "\.flac" )) {
     $FileSuffix += ".flac"
 }
 
-if ( Test-Path $InputPath -PathType Container ) {
+if ( Test-Path -Path "$InputPath" -PathType Container ) {
     $FolderMode = $true
-    if ( $OutputPath -match "\.flac" ) {
-        Write-Uniout "ls" "Error" "Invaild Output folder"
+    if ( "$OutputPath" -match "\.flac$" ) {
+        Write-Uniout "ls" "Error" "Invaild Output path. You must set a folder if the input path is a folder。"
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed$") } | Select-Object DirectoryName, Name, Length
+    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed") } | Select-Object DirectoryName, Name, Length
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
     }
+    $FileCount = $FileList.Count
+    Write-Uniout "s" "Verbose" "Find $FileCount files."
 }
 else {
     $FolderMode = $false
     $FileList = Get-Item -Path "$InputPath"
+    $FileCount = $FileList.Count
 }
-$FileCount = $FileList.Count
 $ErrorCount = 0
 $DoneCount = 0
 $FileSaveSpaceAll = 0
@@ -361,11 +384,10 @@ try {
             try {
                 & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
                 $FileLength = Get-Item $FileOutput | Select-Object -ExpandProperty Length
-                $FileSaveSpace = $FileLengthOri - $FileLength
                 if ( $OutputReplace ) {
                     Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
                 }
-                $PSSubResult = "$FileName" + "|" + "$FileLength" + "|" + "$FileSaveSpace"
+                $PSSubResult = "$FileName" + "|" + "$FileLength" + "|" + "$FileLength"
             }
             catch {
                 $PSSubResult = $Error[0]
@@ -379,14 +401,11 @@ try {
         $aryPowerShell.Add($PSObject) | Out-Null
         $aryIAsyncResult.Add($IASyncResult) | Out-Null
     }
-    Start-Sleep 1
+  
     while ( $aryPowerShell.Count -gt 0 ) {
-        # Single file needn't progress bar
-        if ($FileCount -gt 1) {
-            $ProgressPercent = '{0:n0}' -f (($DoneCount / $FileCount) * 100)
-            $ProgressFileCount = "File " + '{0:n0}' -f ($DoneCount + 1) + "/" + '{0:n0}' -f $FileCount
-            Write-Progress -Activity "Compressing" -Status "$ProgressPercent% Complete:" -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
-        }
+        $ProgressPercent = '{0:n0}' -f (($DoneCount / $FileCount) * 100)
+        $ProgressFileCount = "File " + '{0:n0}' -f ($DoneCount + 1) + "/" + '{0:n0}' -f $FileCount
+        Write-Progress2 -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
         for ( $i = 0; $i -lt $aryPowerShell.Count; $i++ ) {
             $PSObject = $aryPowerShell[$i]
             $IASyncResult = $aryIAsyncResult[$i]
@@ -408,7 +427,8 @@ try {
                 else {
                     $FileName = ($AsyncResult -split "\|")[0]
                     [int]$FileLength = ($AsyncResult -split "\|")[1]
-                    [int]$FileSaveSpace = ($AsyncResult -split "\|")[2]
+                    [int]$FileLengthOri = ($AsyncResult -split "\|")[2]
+                    $FileSaveSpace = $FileLengthOri - $FileLength
                     if ($FileSaveSpace -gt 0) {
                         $FileSaveSpaceOutput = "-Saved " + (Get-FriendlySpace $FileSaveSpace) + "-"
                     }
@@ -417,7 +437,19 @@ try {
                     }
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
-                    Write-Uniout "ls" "File" ("    - File: " + "$FileName" + ".flac Size: " + (Get-FriendlySpace $FileLength) + " ") "$FileSaveSpaceOutput"
+                    if ( [System.Console]::CursorTop -ge ($ProgressLine - 2 )) {
+                        [System.Console]::SetCursorPosition(0, 6)
+                        for ($i1 = 6; $i1 -lt ($ProgressLine - 1); ++$i1) {
+                            Write-Host (" " * $WindowWidth)
+                        }
+                        [System.Console]::SetCursorPosition(4, 6)
+                    }
+                    # No need to pass too many parameters to Write-Uniout, output here directly
+                    Write-Host ("- File: " + "$FileName" + ".flac " ) -NoNewline; Write-Host ((Get-FriendlySpace $FileLengthOri) + "->" ) -NoNewline; Write-Host ((Get-FriendlySpace $FileLength) + " ") -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
+                    # For log
+                    Write-Uniout "l" "Verbose" ("File: " + "$FileName" + ".flac " )
+                    [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
+                    
                 }
                 $PSObject.Dispose()
                 $aryPowerShell.RemoveAt($i)
@@ -440,8 +472,12 @@ finally {
     }
     $RunspacePool.Close()
 }
-
 Write-Uniout "ls" "Info" "Compress Completed"
+Write-Progress2 -PercentComplete 100
+[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
+Write-Host (" " * ($WindowWidth - 6))
+[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
+
 if ($ErrorCount -eq 0) {
     $EndMessage = "No error occurred."
     Write-Uniout "ls" "Done" $EndMessage
@@ -464,4 +500,5 @@ else {
     $FileSaveSpaceAllOutput = "No space saved."
 }
 Write-Uniout "ls" "Done" "$FileSaveSpaceAllOutput"
-$TimeUse = (New-TimeSpan -Start $TimeCount -End (Get-Date)).TotalSeconds
+$TimeUse = '{0:n2}' -f (New-TimeSpan -Start $TimeCount -End (Get-Date)).TotalSeconds
+Write-Uniout "l" "Info" "Time use: $TimeUse s"
