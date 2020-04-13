@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.8.0 Beta
+# Version: 0.8.2 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -32,11 +32,9 @@ function Write-Uniout {
     param ( 
         $WritePlace, 
         $WriteType,
-        $WriteContent,
-        $WriteAdditionalParam 
+        $WriteContent
     )
-    
-    $WriteColor = "White" # $host.UI.RawUI.ForegroundColor can not using in Linux
+    $WriteColor = "White" # $host.UI.RawUI.ForegroundColor invaild in Linux
     switch ( $WriteType ) {
         "Output" { }
         "Verbose" { $WriteContent = "- " + $WriteContent }
@@ -47,7 +45,6 @@ function Write-Uniout {
         "ErrorN" { $WriteColor = "Red" }
         "Center" { [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + [int](($WindowWidth - $WriteContent.Length) / 2 - 4)), [System.Console]::CursorTop) }
         "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
-        "Empty" { $WriteContent = "" }
         "Done" { $WriteColor = "Green" }
         "Help" {
             Write-Host ""
@@ -78,12 +75,12 @@ function Write-Uniout {
             return
         }
     }
-    if ($WritePlace -match "s") {
+    if ( $WritePlace -match "s" ) {
         Write-Host $WriteContent  -ForegroundColor $WriteColor 
         [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + 4 ), [System.Console]::CursorTop )
     }
-    if ($WritePlace -match "l") {
-        Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject $WriteContent -Append
+    if (( $WritePlace -match "l" ) -and $LogEnabled ) {
+        Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject (( Get-Date -Format "[yyyy-MM-dd HH:mm:ss] ") + $WriteContent) -Append
     }
 }
 
@@ -109,13 +106,13 @@ function Write-Notify {
         $NotifyType,
         $NotifyContent
     )
-    if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) ) {  
+    if ( $PSHostWindows ) {  
         [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null
         $Notify = New-Object System.Windows.Forms.NotifyIcon
         $PSHostPath = Get-Process -id $pid | Select-Object -ExpandProperty Path
         $PSIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($PSHostPath)
         $Notify.Icon = $PSIcon
-        $Notify.BalloonTipTitle = "FLAC Recompress Tool"
+        $Notify.BalloonTipTitle = "$ScriptTitle"
         $Notify.BalloonTipIcon = "$NotifyType"
         $Notify.BalloonTipText = "$NotifyContent"
         $Notify.Visible = $true
@@ -195,6 +192,7 @@ else {
     $OSDescription = [System.Environment]::OSVersion.VersionString
 }
 if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform( [System.Runtime.InteropServices.OSPlatform]::Windows )) {
+    $PSHostWindows = $true
     $FileSeparator = "\"
     switch ( $OSArchitecture ) {
         "X64" {
@@ -218,6 +216,7 @@ if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform( [System.
     $BinaryFLACVersion = (& $BinaryFLAC -v)
 }
 else {
+    $PSHostWindows = $false
     $env:TEMP = "/tmp"
     $FileSeparator = "/"
     $BinaryFLAC = "flac"
@@ -227,15 +226,16 @@ else {
         Write-Uniout "s" "Verbose" "Detected Linux or macOS. Use system FLAC binary."
     }
     else {
-        Write-Uniout "s" "Error" "Detected Linux or macOS and missing FLAC binary. You can install FLAC by package manager."
+        Write-Uniout "s" "Error" "Detected Linux or macOS and missing FLAC binary. Please install FLAC in package manager first."
         exit 6
     }
 }
 if ( -not $LogFilePath ) {
     $LogFilePath = $env:TEMP + "$FileSeparator" + "FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
 }
-Write-Uniout "l" "Verbose" "$OSArchitecture"
-Write-Uniout "l" "Verbose" "$OSDescription"
+Write-Uniout "l" "Verbose" "Architecture: $OSArchitecture"
+Write-Uniout "l" "Verbose" "OS: $OSDescription"
+Write-Uniout "l" "Verbose" "FLAC Version: $BinaryFLACVersion"
 if ( -not $RunspaceMax ) {
     $CoreNumber = [System.Environment]::ProcessorCount
     if (( $OSArchitecture -eq "Arm" ) -or ( $OSArchitecture -eq "Arm64" )) {
@@ -256,9 +256,11 @@ elseif ( $RunspaceMax -le 0 ) {
 # No Paramater start
 if ( -not $InputPath ) { 
     Write-Uniout "s" "Info" "No prarmater start. Using -h or -help for help."
-    $InputPath = Read-Host "    Input file or folder path  (-p)"
+    $InputPath = Read-Host "Input file or folder path  (-p)"
+    [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
     if ( -not $OutputPath ) {
-        $OutputPath = Read-Host "    Output file or folder path (-o)"
+        $OutputPath = Read-Host "Output file or folder path (-o)"
+        [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
     }
 }
 
@@ -363,7 +365,7 @@ try {
                 $FileOutputFolder = "$OutputPath"
             }
         }
-        if ( -not (Test-Path "$FileOutputFolder") ) {
+        if ( -not ( Test-Path "$FileOutputFolder" )) {
             New-Item -Path "$FileOutputFolder" -ItemType Directory -Force | Out-Null
         }
        
@@ -387,13 +389,13 @@ try {
                 if ( $OutputReplace ) {
                     Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
                 }
-                $PSSubResult = "$FileName" + "|" + "$FileLength" + "|" + "$FileLength"
+                $PSSubResult = "$FileName|$FileLength|$FileLengthori"
             }
             catch {
-                $PSSubResult = $Error[0]
+                $PSSubResult = "- File: $FileName.flac " + [string]($Error[0])
             }
             finally {
-                [string]$PSSubResult
+                $PSSubResult
             }
         }
         $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace) | Out-Null
@@ -413,15 +415,15 @@ try {
                 $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
                 if ( $AsyncResult -cmatch "WARNING:" ) {
                     if ( $AsyncResult -cmatch "is not an Ogg FLAC file; treating as a raw file" ) {
-                        Write-Uniout "ls" "Error" $AsyncResult.Replace("WARNING: ", "").Replace("is not an Ogg FLAC file; treating as a raw file", "is not a vaild FLAC file")
+                        Write-Uniout "ls" "ErrorN" $AsyncResult.Replace("WARNING: ", "").Replace("is not an Ogg FLAC file; treating as a raw file", "is not a vaild FLAC file")
                         $ErrorCount++
                     }
                     else {
-                        Write-Uniout "ls" "Warning" $AsyncResult.Replace("WARNING: ", "")
+                        Write-Uniout "ls" "WarningN" $AsyncResult.Replace("WARNING: ", "")
                     }
                 }
                 elseif ( $AsyncResult -cmatch "ERROR:" ) {
-                    Write-Uniout "ls" "Error" $AsyncResult.Replace("ERROR: ", "")
+                    Write-Uniout "ls" "ErrorN" $AsyncResult.Replace("ERROR: ", "")
                     $ErrorCount++
                 }
                 else {
@@ -429,14 +431,15 @@ try {
                     [int]$FileLength = ($AsyncResult -split "\|")[1]
                     [int]$FileLengthOri = ($AsyncResult -split "\|")[2]
                     $FileSaveSpace = $FileLengthOri - $FileLength
-                    if ($FileSaveSpace -gt 0) {
-                        $FileSaveSpaceOutput = "-Saved " + (Get-FriendlySpace $FileSaveSpace) + "-"
+                    if ( $FileSaveSpace -gt 0 ) {
+                        $FileSaveSpaceOutput = "Saved " + (Get-FriendlySpace $FileSaveSpace)
                     }
                     else {
-                        $FileSaveSpaceOutput = "No space saved."
+                        $FileSaveSpaceOutput = "Already been compressed"
                     }
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
+                    # Clear output area
                     if ( [System.Console]::CursorTop -ge ($ProgressLine - 2 )) {
                         [System.Console]::SetCursorPosition(0, 6)
                         for ($i1 = 6; $i1 -lt ($ProgressLine - 1); ++$i1) {
@@ -445,11 +448,10 @@ try {
                         [System.Console]::SetCursorPosition(4, 6)
                     }
                     # No need to pass too many parameters to Write-Uniout, output here directly
-                    Write-Host ("- File: " + "$FileName" + ".flac " ) -NoNewline; Write-Host ((Get-FriendlySpace $FileLengthOri) + "->" ) -NoNewline; Write-Host ((Get-FriendlySpace $FileLength) + " ") -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
+                    Write-Host ( "- File: $FileName.flac " ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLengthOri ) + "->" ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLength ) + " " ) -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
                     # For log
-                    Write-Uniout "l" "Verbose" ("File: " + "$FileName" + ".flac " )
+                    Write-Uniout "l" "Verbose" ( "File: $FileName.flac Original Size: " + ( Get-FriendlySpace $FileLengthOri ) + " Recompressed Size: " + ( Get-FriendlySpace $FileLength ))
                     [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
-                    
                 }
                 $PSObject.Dispose()
                 $aryPowerShell.RemoveAt($i)
@@ -465,8 +467,8 @@ catch {
     exit 1
 }
 finally {
-    if (($DoneCount + $ErrorCount) -ne $FileCount) {
-        if (-not $ErrorReasonGet) {
+    if (( $DoneCount + $ErrorCount ) -ne $FileCount ) {
+        if ( -not $ErrorReasonGet ) {
             Write-Uniout "ls" "Error" "Exit abnormally."
         }
     }
@@ -474,31 +476,35 @@ finally {
 }
 Write-Uniout "ls" "Info" "Compress Completed"
 Write-Progress2 -PercentComplete 100
-[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
-Write-Host (" " * ($WindowWidth - 6))
-[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
+[System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
+Write-Host (" " * ( $WindowWidth - 6 ))
+[System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
 
-if ($ErrorCount -eq 0) {
-    $EndMessage = "No error occurred."
-    Write-Uniout "ls" "Done" $EndMessage
-    Write-Notify "Info" $EndMessage
+if ( $ErrorCount -eq 0 ) {
+    $ErrorMessage = "$ErrorCount error occurred."
+    Write-Uniout "ls" "Done" $ErrorMessage
+   
+}
+elseif ( $ErrorCount -eq 1 ) {
+    $ErrorMessage = "$ErrorCount error occurred."
+    Write-Uniout "ls" "WarningN" $ErrorMessage
 }
 else {
-    if ( $ErrorCount -eq 1 ) {
-        $EndMessage = "$ErrorCount file has an error."
-    }
-    else {
-        $EndMessage = "$ErrorCount files have errors."
-    }
-    Write-Uniout "ls" "WarningN" $EndMessage
-    Write-Notify "Warning" $EndMessage
+    $ErrorMessage = "$ErrorCount errors occurred."
+    Write-Uniout "ls" "WarningN" $ErrorMessage
 }
 if ($FileSaveSpaceAll -gt 0) {
-    $FileSaveSpaceAllOutput = "Compressed " + $DoneCount + " files. Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
+    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
 }
 else {
-    $FileSaveSpaceAllOutput = "No space saved."
+    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. All of files have been compressed."
 }
 Write-Uniout "ls" "Done" "$FileSaveSpaceAllOutput"
+if ( $ErrorCount -eq 0 ) {
+    Write-Notify "Info" "$FileSaveSpaceAllOutput"
+}
+else {
+    Write-Notify "Warning" $ErrorMessage
+}
 $TimeUse = '{0:n2}' -f (New-TimeSpan -Start $TimeCount -End (Get-Date)).TotalSeconds
 Write-Uniout "l" "Info" "Time use: $TimeUse s"
