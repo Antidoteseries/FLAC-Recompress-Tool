@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.9.0 Beta
+# Version: 0.9.3 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -130,7 +130,7 @@ function Write-Notify {
     }
 }
 
-function Get-FriendlySpace {
+function Get-FriendlySize {
     param ( $FileSpace )
     if ( $FileSpace -ge 1TB ) {
         $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1TB)) + "TB"
@@ -152,7 +152,7 @@ function Get-FriendlySpace {
 
 # Getting script infomation
 $ScriptPath = $MyInvocation.MyCommand.Definition
-$ScriptFolder = Split-Path -Parent $ScriptPath
+$ScriptFolder = Split-Path -Parent "$ScriptPath"
 $PSVercode = $PSVersionTable.PSVersion.major
 if ( $PSVercode -lt 5 ) {
     Write-Uniout "s" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
@@ -163,7 +163,7 @@ if ( $PSVercode -lt 5 ) {
 Clear-Host
 $LogEnabled = $true
 $ScriptTitle = "FLAC Recompress Tool"
-$ScriptInfo = Get-content -Path $ScriptPath -TotalCount 6
+$ScriptInfo = Get-content -Path "$ScriptPath" -TotalCount 6
 $host.UI.RawUI.WindowTitle = $ScriptTitle
 [System.Console]::SetCursorPosition(4, 1)
 Write-Uniout "s" "Center" ($ScriptTitle + $ScriptInfo[5].Replace("# Version:", ""))
@@ -279,7 +279,7 @@ if ( -not $InputPath ) {
     Write-Uniout "ls" "Warning" "Unspecified Inputpath. Using $ScriptFolder as Inputpath."
     $InputPath = $ScriptFolder 
 }
-elseif ( -not (Test-Path $InputPath) ) {
+elseif (( -not ( Test-Path -Path "$InputPath" )) -or ( $InputPath -match '''''''' ) -or ( $InputPath -match '``' )) {
     Write-Uniout "ls" "Error" "Inputpath invaild or don't have permissions."
     exit 3
 }
@@ -289,9 +289,10 @@ if ( $InputPath.StartsWith(".\") -or $InputPath.StartsWith("./") ) {
 if ( $InputPath.EndsWith("\") -or $InputPath.EndsWith("/") ) { 
     $InputPath = $InputPath.Remove($InputPath.Length - 1) 
 }
+$InputPathLiteral = ( $InputPath -replace '`\[', '[' -replace '`\]', ']' -replace '''''', '''' )
 
 if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
-    $OutputPath = $env:TEMP + "$FileSeparator" + "Recompressed"
+    $OutputPath = "$env:TEMP" + "$FileSeparator" + "Recompressed"
     $OutputReplace = $true
     if ( $FileSuffix ) {
         Write-Uniout "ls" "Warning" "File suffix can not using in Replace mode."
@@ -302,11 +303,10 @@ else {
     $OutputReplace = $false
     if ( -not $OutputPath ) {
         if ("$InputPath" -match "\.flac") {
-            $OutputPath = ("$InputPath" -replace "\$FileSeparator[^/\\\?]+\.flac$") + "$FileSeparator" + "Recompressed"
+            $OutputPath = ( "$InputPathLiteral" -replace "\$FileSeparator[^/\\\?]+\.flac$" ) + "$FileSeparator" + "Recompressed"
         }
         else {
-            $OutputPath = "$InputPath" + "$FileSeparator" + "Recompressed"
-            
+            $OutputPath = "$InputPathLiteral" + "$FileSeparator" + "Recompressed"  
         }
         Write-Uniout "ls" "Warning" "Unspecified Ouputpath. File will output to $OutputPath"
     }
@@ -317,6 +317,7 @@ else {
         $OutputPath = $OutputPath.Remove($OutputPath.Length - 1) 
     }
 }
+$OutputPathLiteral = ( $OutputPath -replace '`\[', '[' -replace '`\]', ']' -replace '''''', '''' )
 
 if ( -not $FileSuffix ) {
     $FileSuffix = ".flac"
@@ -336,7 +337,7 @@ if ( Test-Path -Path "$InputPath" -PathType Container ) {
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed") } | Select-Object DirectoryName, Name, Length
+    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed") }
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
@@ -362,24 +363,25 @@ try {
     $aryIAsyncResult = New-Object System.Collections.ArrayList
     $FileList | ForEach-Object { 
         $FileSource = $_.DirectoryName + $FileSeparator + $_.Name
-        $FileLengthOri = $_.Length 
+        $FileLengthOri = $_.Length
         $FileName = $_.Name -replace "\.flac$"
         if ( $FolderMode ) {
-            $FileRelativePath = ($_.DirectoryName).Replace($InputPath, "")
-            $FileOutput = "$OutputPath" + "$FileRelativePath" + $FileSeparator + "$FileName" + "$FileSuffix"
-            $FileOutputFolder = "$OutputPath" + "$FileRelativePath"
+            $FileRelativePath = $_.DirectoryName -replace [Regex]::Escape( $InputPathLiteral ), "" 
+            $FileOutput = "$OutputPathLiteral" + "$FileRelativePath" + $FileSeparator + "$FileName" + "$FileSuffix"
+            $FileOutputFolder = "$OutputPathLiteral" + "$FileRelativePath"
         }
         else {
             if ( $OutputPath -match "\.flac" ) {
                 $FileOutput = "$OutputPath"
-                $FileOutputFolder = "$OutputPath" -replace "\$FileSeparator[^/\\\?]+\.flac$"
+                $FileOutputFolder = "$OutputPathLiteral" -replace "\$FileSeparator[^/\\\?]+\.flac$"
             }
             else {
-                $FileOutput = "$OutputPath" + $FileSeparator + "$FileName" + "$FileSuffix"
-                $FileOutputFolder = "$OutputPath"
+                $FileOutput = "$OutputPathLiteral" + $FileSeparator + "$FileName" + "$FileSuffix"
+                $FileOutputFolder = "$OutputPathLiteral"
             }
         }
-        if ( -not ( Test-Path "$FileOutputFolder" )) {
+       
+        if ( -not ( Test-Path -LiteralPath "$FileOutputFolder" )) {
             New-Item -Path "$FileOutputFolder" -ItemType Directory -Force | Out-Null
         }
        
@@ -401,9 +403,9 @@ try {
             $ErrorActionPreference = 'Stop'
             try {
                 & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
-                $FileLength = Get-Item -Path "$FileOutput" | Select-Object -ExpandProperty Length
+                $FileLength = Get-Item -LiteralPath "$FileOutput" | Select-Object -ExpandProperty Length
                 if ( $OutputReplace ) {
-                    Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
+                    Move-Item -LiteralPath "$FileOutput" -Destination "$FileSource" -Force
                 }
                 $PSSubResult = "$FileName|$FileLength|$FileLengthori"
             }
@@ -415,20 +417,21 @@ try {
                     & $BinaryMetaFLAC --export-picture-to="$FileOutput.tag_picture" "$FileSource"
                     & $BinaryFLAC -d -o "$FileOutput.wav" "$FileSource"
                     & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileOutput.wav"
-                    Remove-Item -Path "$FileOutput.wav" -Force
+                    Remove-Item -LiteralPath "$FileOutput.wav" -Force
                     & $BinaryMetaFLAC --import-tags-from="$FileOutput.tag" "$FileOutput"
-                    Remove-Item -Path "$FileOutput.tag" -Force
-                    if (Test-Path -Path "$FileOutput.tag_picture") {
+                    Remove-Item -LiteralPath "$FileOutput.tag" -Force
+                    if (Test-Path -LiteralPath "$FileOutput.tag_picture") {
                         & $BinaryMetaFLAC --import-picture-from="$FileOutput.tag_picture" "$FileOutput"
-                        Remove-Item -Path "$FileOutput.tag_picture" -Force
+                        Remove-Item -LiteralPath "$FileOutput.tag_picture" -Force
                     }
-                    $FileLength = Get-Item -Path "$FileOutput" | Select-Object -ExpandProperty Length
+                    $FileLength = Get-Item -LiteralPath "$FileOutput" | Select-Object -ExpandProperty Length
                     if ( $OutputReplace ) {
-                        Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
+                        Move-Item -LiteralPath "$FileOutput" -Destination "$FileSource" -Force
                     }
                     $PSSubResult = "$FileName|$FileLength|$FileLengthori"
                 }
                 else {
+                    Remove-Item -LiteralPath "$FileOutput" -Force
                     if ( $ErrorMessage -match "has an ID3" ) {
                         $ErrorMessage = "has ID3 tag that not support non-standard metadata"
                     }
@@ -475,7 +478,7 @@ try {
                     [int]$FileLengthOri = ($AsyncResult -split "\|")[2]
                     $FileSaveSpace = $FileLengthOri - $FileLength
                     if ( $FileSaveSpace -gt 0 ) {
-                        $FileSaveSpaceOutput = "Saved " + (Get-FriendlySpace $FileSaveSpace)
+                        $FileSaveSpaceOutput = "Saved " + (Get-FriendlySize $FileSaveSpace)
                     }
                     else {
                         $FileSaveSpaceOutput = "Already been compressed"
@@ -483,9 +486,9 @@ try {
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
                     # No need to pass too many parameters to Write-Uniout, output here directly
-                    Write-Host ( "- File: $FileName.flac " ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLengthOri ) + "->" ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLength ) + " " ) -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
+                    Write-Host ( "- File: $FileName.flac " ) -NoNewline; Write-Host (( Get-FriendlySize $FileLengthOri ) + "->" ) -NoNewline; Write-Host (( Get-FriendlySize $FileLength ) + " " ) -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
                     # For log
-                    Write-Uniout "l" "Verbose" ( "File: $FileName.flac Original Size: " + ( Get-FriendlySpace $FileLengthOri ) + " Recompressed Size: " + ( Get-FriendlySpace $FileLength ))
+                    Write-Uniout "l" "Verbose" ( "File: $FileName.flac Original Size: " + ( Get-FriendlySize $FileLengthOri ) + " Recompressed Size: " + ( Get-FriendlySize $FileLength ))
                     [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
                 }
                 $PSObject.Dispose()
@@ -498,6 +501,7 @@ try {
 }
 catch {
     Write-Uniout "ls" "Error" $Error[0]
+    Write-Uniout "l" "Verbose" $Error[0].InvocationInfo.PositionMessage
     $ErrorReasonGet = $true
     exit 1
 }
@@ -512,7 +516,7 @@ finally {
 Write-Uniout "ls" "Info" "Compress Completed"
 Write-Progress2 -PercentComplete 100
 [System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
-Write-Host (" " * ( $WindowWidth - 6 ))
+Write-Host ( " " * ( $WindowWidth - 6 ))
 [System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
 
 if ( $ErrorCount -eq 0 ) {
@@ -528,8 +532,8 @@ else {
     $ErrorMessage = "$ErrorCount errors occurred."
     Write-Uniout "ls" "WarningN" $ErrorMessage
 }
-if ($FileSaveSpaceAll -gt 0) {
-    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + (Get-FriendlySpace $FileSaveSpaceAll)
+if ( $FileSaveSpaceAll -gt 0 ) {
+    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + (Get-FriendlySize $FileSaveSpaceAll)
 }
 else {
     $FileSaveSpaceAllOutput = "Compressed $DoneCount files. All of files have been compressed."
