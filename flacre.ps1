@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.8.2 Beta
+# Version: 0.9.0 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -18,13 +18,20 @@ param (
     [string]$s,
     [string]$suffix,
     [int]$t,
-    [int]$thread
+    [int]$thread,
+    [switch]$id3convert
 )
 if ( $l ) { $LogFilePath = $l } else { $LogFilePath = $log }
 if ( $o ) { $OutputPath = $o } else { $OutputPath = $output }
 if ( $p ) { $InputPath = $p } else { $InputPath = $path }
 if ( $t ) { $RunspaceMax = $t } else { $RunspaceMax = $thread }
 if ( $s ) { $FileSuffix = $s } else { $FileSuffix = $suffix }
+if ( $id3convert ) {
+    $ConvertID3Tag = $true
+}
+else {
+    $ConvertID3Tag = $false
+}
 
 $WindowWidth = [System.Console]::BufferWidth 
 $WindowHeight = [System.Console]::BufferHeight
@@ -61,6 +68,9 @@ function Write-Uniout {
             Write-Host "        Suffix option. It effects recompressed files' name."
             Write-Host "    -l, -log" -ForegroundColor Yellow -NoNewline; Write-Host " <path>" -ForegroundColor Green
             Write-Host "        Log option. You can export log to the path. By default, log will be generate in TEMP folder."
+            Write-Host "    -id3convert" -ForegroundColor Yellow -NoNewline; Write-Host " (Experiment Feature)" -ForegroundColor Red
+            Write-Host "        Enable convert id3 tag to standard FLAC tag. If not enable, FLAC with id3 tag will occurate an error."
+            Write-Host "        ID3 tag is not supported by Xiph officially, converting may lost metadata like title, artist and so on."
             Write-Host "    -h, -help" -ForegroundColor Yellow
             Write-Host "        Display the help.`n"
             Write-Host "    Examples:"
@@ -315,6 +325,10 @@ if ( -not ( $FileSuffix -match "\.flac" )) {
     $FileSuffix += ".flac"
 }
 
+if ( $ConvertID3Tag ) {
+    Write-Uniout "ls" "Info" "ID3 Tag Convert is enabled. ID3 tag is not supported by Xiph officially, converting may lost metadata."
+}
+
 if ( Test-Path -Path "$InputPath" -PathType Container ) {
     $FolderMode = $true
     if ( "$OutputPath" -match "\.flac$" ) {
@@ -375,30 +389,60 @@ try {
             [CmdletBinding()]
             param(
                 [parameter(mandatory, position = 0)][string]$BinaryFLAC,
-                [parameter(mandatory, position = 1)][string]$FileOutput,
-                [parameter(mandatory, position = 2)][string]$FileSource,
-                [parameter(mandatory, position = 3)][string]$FileName,
-                [parameter(mandatory, position = 4)][string]$FileLengthOri,
-                [parameter(mandatory, position = 5)][System.Boolean]$OutputReplace
+                [parameter(mandatory, position = 1)][string]$BinaryMetaFLAC,
+                [parameter(mandatory, position = 2)][string]$FileOutput,
+                [parameter(mandatory, position = 3)][string]$FileSource,
+                [parameter(mandatory, position = 4)][string]$FileName,
+                [parameter(mandatory, position = 5)][string]$FileLengthOri,
+                [parameter(mandatory, position = 6)][switch]$OutputReplace,
+                [parameter(mandatory, position = 7)][switch]$ConvertID3Tag
             )
             # For catch error
             $ErrorActionPreference = 'Stop'
             try {
                 & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
-                $FileLength = Get-Item $FileOutput | Select-Object -ExpandProperty Length
+                $FileLength = Get-Item -Path "$FileOutput" | Select-Object -ExpandProperty Length
                 if ( $OutputReplace ) {
                     Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
                 }
                 $PSSubResult = "$FileName|$FileLength|$FileLengthori"
             }
             catch {
-                $PSSubResult = "- File: $FileName.flac " + [string]($Error[0])
+                $ErrorMessage = ( $Error[0].Exception.Message -replace "^.*:\s")
+                if (( $ConvertID3Tag ) -and ( $ErrorMessage -match "has an ID3" )) {
+                    $ErrorActionPreference = 'SilentlyContinue'
+                    & $BinaryMetaFLAC --export-tags-to="$FileOutput.tag" "$FileSource"
+                    & $BinaryMetaFLAC --export-picture-to="$FileOutput.tag_picture" "$FileSource"
+                    & $BinaryFLAC -d -o "$FileOutput.wav" "$FileSource"
+                    & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileOutput.wav"
+                    Remove-Item -Path "$FileOutput.wav" -Force
+                    & $BinaryMetaFLAC --import-tags-from="$FileOutput.tag" "$FileOutput"
+                    Remove-Item -Path "$FileOutput.tag" -Force
+                    if (Test-Path -Path "$FileOutput.tag_picture") {
+                        & $BinaryMetaFLAC --import-picture-from="$FileOutput.tag_picture" "$FileOutput"
+                        Remove-Item -Path "$FileOutput.tag_picture" -Force
+                    }
+                    $FileLength = Get-Item -Path "$FileOutput" | Select-Object -ExpandProperty Length
+                    if ( $OutputReplace ) {
+                        Move-Item -Path "$FileOutput" -Destination "$FileSource" -Force
+                    }
+                    $PSSubResult = "$FileName|$FileLength|$FileLengthori"
+                }
+                else {
+                    if ( $ErrorMessage -match "has an ID3" ) {
+                        $ErrorMessage = "has ID3 tag that not support non-standard metadata"
+                    }
+                    elseif (( $ErrorMessage -cmatch "is not an Ogg FLAC file; treating as a raw file" ) -or ( $ErrorMessage -cmatch "for encoding a raw file you must specify a value" )) {
+                        $ErrorMessage = "not a vaild FLAC file"
+                    }
+                    $PSSubResult = "- File: $FileName.flac Error: " + $ErrorMessage
+                }
             }
             finally {
                 $PSSubResult
             }
         }
-        $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace) | Out-Null
+        $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($BinaryMetaFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace).AddArgument($ConvertID3Tag) | Out-Null
         $IASyncResult = $PSObject.BeginInvoke()
         $aryPowerShell.Add($PSObject) | Out-Null
         $aryIAsyncResult.Add($IASyncResult) | Out-Null
@@ -413,17 +457,16 @@ try {
             $IASyncResult = $aryIAsyncResult[$i]
             if ( $IASyncResult.IsCompleted -eq $true ) {
                 $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
-                if ( $AsyncResult -cmatch "WARNING:" ) {
-                    if ( $AsyncResult -cmatch "is not an Ogg FLAC file; treating as a raw file" ) {
-                        Write-Uniout "ls" "ErrorN" $AsyncResult.Replace("WARNING: ", "").Replace("is not an Ogg FLAC file; treating as a raw file", "is not a vaild FLAC file")
-                        $ErrorCount++
+                # Clear output area
+                if ( [System.Console]::CursorTop -ge ($ProgressLine - 2 )) {
+                    [System.Console]::SetCursorPosition(0, 6)
+                    for ($i1 = 6; $i1 -lt ($ProgressLine - 1); ++$i1) {
+                        Write-Host (" " * $WindowWidth)
                     }
-                    else {
-                        Write-Uniout "ls" "WarningN" $AsyncResult.Replace("WARNING: ", "")
-                    }
+                    [System.Console]::SetCursorPosition(4, 6)
                 }
-                elseif ( $AsyncResult -cmatch "ERROR:" ) {
-                    Write-Uniout "ls" "ErrorN" $AsyncResult.Replace("ERROR: ", "")
+                if ( $AsyncResult -cmatch "Error:" ) {
+                    Write-Uniout "ls" "ErrorN" $AsyncResult
                     $ErrorCount++
                 }
                 else {
@@ -439,14 +482,6 @@ try {
                     }
                     $FileSaveSpaceAll += $FileSaveSpace
                     $DoneCount++
-                    # Clear output area
-                    if ( [System.Console]::CursorTop -ge ($ProgressLine - 2 )) {
-                        [System.Console]::SetCursorPosition(0, 6)
-                        for ($i1 = 6; $i1 -lt ($ProgressLine - 1); ++$i1) {
-                            Write-Host (" " * $WindowWidth)
-                        }
-                        [System.Console]::SetCursorPosition(4, 6)
-                    }
                     # No need to pass too many parameters to Write-Uniout, output here directly
                     Write-Host ( "- File: $FileName.flac " ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLengthOri ) + "->" ) -NoNewline; Write-Host (( Get-FriendlySpace $FileLength ) + " " ) -ForegroundColor White -NoNewline; Write-Host "$FileSaveSpaceOutput" -ForegroundColor Green
                     # For log
