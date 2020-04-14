@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.9.3 Beta
+# Version: 0.9.4 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -50,8 +50,8 @@ function Write-Uniout {
         "WarningN" { $WriteColor = "Yellow" }
         "Error" { $WriteContent = "Error: " + $WriteContent; $WriteColor = "Red" }
         "ErrorN" { $WriteColor = "Red" }
-        "Center" { [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + [int](($WindowWidth - $WriteContent.Length) / 2 - 4)), [System.Console]::CursorTop) }
-        "Divide" { $WriteContent = "-" * ($WindowWidth - 8) }
+        "Center" { [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + [int](( $WindowWidth - $WriteContent.Length ) / 2 - 4 )), [System.Console]::CursorTop ) }
+        "Divide" { $WriteContent = "-" * ( $WindowWidth - 8 ) }
         "Done" { $WriteColor = "Green" }
         "Help" {
             Write-Host ""
@@ -87,10 +87,10 @@ function Write-Uniout {
     }
     if ( $WritePlace -match "s" ) {
         Write-Host $WriteContent  -ForegroundColor $WriteColor 
-        [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + 4 ), [System.Console]::CursorTop )
+        [System.Console]::SetCursorPosition(( [System.Console]::CursorLeft + 4 ), [System.Console]::CursorTop)
     }
     if (( $WritePlace -match "l" ) -and $LogEnabled ) {
-        Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject (( Get-Date -Format "[yyyy-MM-dd HH:mm:ss] ") + $WriteContent) -Append
+        Out-File -FilePath $LogFilePath -Encoding utf8 -InputObject (( Get-Date -Format "[yyyy-MM-dd HH:mm:ss] ") + $WriteContent ) -Append
     }
 }
 
@@ -102,12 +102,12 @@ function Write-Progress2 {
     )
     $ProgressLineStart = [System.Console]::CursorTop
     [System.Console]::SetCursorPosition(4, $ProgressLine - 1)
-    Write-Host ([string]$PercentCompleted + "% Completed:"); [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
-    $ProgressStringCount = [int](( $WindowWidth - 10) * ($PercentCompleted / 100))
-    $ProgressString = "[" + "o" * $ProgressStringCount + " " * ($WindowWidth - 10 - $ProgressStringCount ) + "]"
+    Write-Host ( [string]$PercentCompleted + "% Completed:" ) -ForegroundColor White; [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
+    $ProgressStringCount = [int](( $WindowWidth - 10 ) * ( $PercentCompleted / 100 ))
+    $ProgressString = "[" + "o" * $ProgressStringCount + " " * ( $WindowWidth - 10 - $ProgressStringCount ) + "]"
     Write-Host $ProgressString ; [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
     Write-Host $CurrentOperation; [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
-    [System.Console]::SetCursorPosition(4, $ProgressLineStart )
+    [System.Console]::SetCursorPosition(4, $ProgressLineStart)
 }
 
 # Notify for Windows
@@ -133,25 +133,25 @@ function Write-Notify {
 function Get-FriendlySize {
     param ( $FileSpace )
     if ( $FileSpace -ge 1TB ) {
-        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1TB)) + "TB"
+        $FileFriendlySpace = ( '{0:n2}' -f ( $FileSpace / 1TB )) + "TB"
     }
     elseif ( $FileSpace -ge 1GB ) {
-        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1GB)) + "GB"
+        $FileFriendlySpace = ( '{0:n2}' -f ( $FileSpace / 1GB )) + "GB"
     }
     elseif ( $FileSpace -ge 1MB ) {
-        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1MB)) + "MB"
+        $FileFriendlySpace = ( '{0:n2}' -f ( $FileSpace / 1MB )) + "MB"
     }
     elseif ( $FileSpace -ge 1KB ) {
-        $FileFriendlySpace = ('{0:n2}' -f ($FileSpace / 1KB)) + "KB"
+        $FileFriendlySpace = ( '{0:n2}' -f ( $FileSpace / 1KB )) + "KB"
     }
     elseif ( $FileSpace -gt 0 ) {
-        $FileFriendlySpace = ('{0:n2}' -f $FileSpace ) + "B"
+        $FileFriendlySpace = ( '{0:n2}' -f $FileSpace ) + "B"
     }
     return $FileFriendlySpace
 }
 
 # Getting script infomation
-$ScriptPath = $MyInvocation.MyCommand.Definition
+$ScriptPath = $MyInvocation.MyCommand.Definition # is Literal Path
 $ScriptFolder = Split-Path -Parent "$ScriptPath"
 $PSVercode = $PSVersionTable.PSVersion.major
 if ( $PSVercode -lt 5 ) {
@@ -163,10 +163,10 @@ if ( $PSVercode -lt 5 ) {
 Clear-Host
 $LogEnabled = $true
 $ScriptTitle = "FLAC Recompress Tool"
-$ScriptInfo = Get-content -Path "$ScriptPath" -TotalCount 6
+$ScriptInfo = Get-content -LiteralPath $ScriptPath -TotalCount 6 
 $host.UI.RawUI.WindowTitle = $ScriptTitle
 [System.Console]::SetCursorPosition(4, 1)
-Write-Uniout "s" "Center" ($ScriptTitle + $ScriptInfo[5].Replace("# Version:", ""))
+Write-Uniout "s" "Center" ( $ScriptTitle + $ScriptInfo[5].Replace("# Version:", "" ) )
 Write-Uniout "s" "Center" $ScriptInfo[2].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[4].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[3].Replace("# Source: ", "")
@@ -223,7 +223,7 @@ if ( [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform( [System.
             exit 2
         }
     }
-    $BinaryFLACVersion = (& $BinaryFLAC -v)
+    $BinaryFLACVersion = ( & $BinaryFLAC -v )
 }
 else {
     $PSHostWindows = $false
@@ -231,7 +231,7 @@ else {
     $FileSeparator = "/"
     $BinaryFLAC = "flac"
     $BinaryMetaFLAC = "metaflac" 
-    $BinaryFLACVersion = (& $BinaryFLAC -v)
+    $BinaryFLACVersion = ( & $BinaryFLAC -v )
     if ( $BinaryFLACVersion ) {
         Write-Uniout "s" "Verbose" "Detected Linux or macOS. Use system FLAC binary."
     }
@@ -241,7 +241,7 @@ else {
     }
 }
 if ( -not $LogFilePath ) {
-    $LogFilePath = $env:TEMP + "$FileSeparator" + "FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
+    $LogFilePath = $env:TEMP + $FileSeparator + "FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
 }
 Write-Uniout "l" "Verbose" "Architecture: $OSArchitecture"
 Write-Uniout "l" "Verbose" "OS: $OSDescription"
@@ -249,12 +249,12 @@ Write-Uniout "l" "Verbose" "FLAC Version: $BinaryFLACVersion"
 if ( -not $RunspaceMax ) {
     $CoreNumber = [System.Environment]::ProcessorCount
     if (( $OSArchitecture -eq "Arm" ) -or ( $OSArchitecture -eq "Arm64" )) {
-        $RunspaceMax = '{0:n0}' -f ($CoreNumber / 2) 
+        $RunspaceMax = '{0:n0}' -f ( $CoreNumber / 2 ) 
     }
     elseif ( $CoreNumber -ge 4 ) {
         $RunspaceMax = $CoreNumber - 2 
     }
-    elseif ($CoreNumber -ge 2) {
+    elseif ( $CoreNumber -ge 2 ) {
         $RunspaceMax = $CoreNumber - 1
     }
 }
@@ -292,7 +292,7 @@ if ( $InputPath.EndsWith("\") -or $InputPath.EndsWith("/") ) {
 $InputPathLiteral = ( $InputPath -replace '`\[', '[' -replace '`\]', ']' -replace '''''', '''' )
 
 if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
-    $OutputPath = "$env:TEMP" + "$FileSeparator" + "Recompressed"
+    $OutputPath = $env:TEMP + $FileSeparator + "Recompressed"
     $OutputReplace = $true
     if ( $FileSuffix ) {
         Write-Uniout "ls" "Warning" "File suffix can not using in Replace mode."
@@ -302,11 +302,11 @@ if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
 else {
     $OutputReplace = $false
     if ( -not $OutputPath ) {
-        if ("$InputPath" -match "\.flac") {
-            $OutputPath = ( "$InputPathLiteral" -replace "\$FileSeparator[^/\\\?]+\.flac$" ) + "$FileSeparator" + "Recompressed"
+        if ( $InputPath -match "\.flac") {
+            $OutputPath = ( $InputPathLiteral -replace "\$FileSeparator[^/\\\?]+\.flac$" ) + $FileSeparator + "Recompressed"
         }
         else {
-            $OutputPath = "$InputPathLiteral" + "$FileSeparator" + "Recompressed"  
+            $OutputPath = $InputPathLiteral + $FileSeparator + "Recompressed"  
         }
         Write-Uniout "ls" "Warning" "Unspecified Ouputpath. File will output to $OutputPath"
     }
@@ -314,7 +314,7 @@ else {
         $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     }
     if ( $OutputPath.EndsWith("\") -or $OutputPath.EndsWith("/") ) { 
-        $OutputPath = $OutputPath.Remove($OutputPath.Length - 1) 
+        $OutputPath = $OutputPath.Remove( $OutputPath.Length - 1 ) 
     }
 }
 $OutputPathLiteral = ( $OutputPath -replace '`\[', '[' -replace '`\]', ']' -replace '''''', '''' )
@@ -330,14 +330,14 @@ if ( $ConvertID3Tag ) {
     Write-Uniout "ls" "Info" "ID3 Tag Convert is enabled. ID3 tag is not supported by Xiph officially, converting may lost metadata."
 }
 
-if ( Test-Path -Path "$InputPath" -PathType Container ) {
+if ( Test-Path -LiteralPath $InputPathLiteral -PathType Container ) {
     $FolderMode = $true
     if ( "$OutputPath" -match "\.flac$" ) {
         Write-Uniout "ls" "Error" "Invaild Output path. You must set a folder if the input path is a folder。"
         exit 4
     }
     Write-Uniout "ls" "Info" "Getting Filelist"
-    $FileList = Get-ChildItem -Path "$InputPath" -Filter "*.flac" -Recurse | Where-Object { -not ($_.Directory -cmatch "Recompressed") }
+    $FileList = Get-ChildItem -LiteralPath $InputPathLiteral -Filter "*.flac" -Recurse | Where-Object { -not ( $_.Directory -cmatch "Recompressed" ) }
     if ( -not $FileList ) {
         Write-Uniout "ls" "Warning" "No FLAC file found."
         exit 0
@@ -347,7 +347,7 @@ if ( Test-Path -Path "$InputPath" -PathType Container ) {
 }
 else {
     $FolderMode = $false
-    $FileList = Get-Item -Path "$InputPath"
+    $FileList = Get-Item -LiteralPath $InputPathLiteral
     $FileCount = $FileList.Count
 }
 $ErrorCount = 0
@@ -361,30 +361,32 @@ $RunspacePool.Open()
 try {
     $aryPowerShell = New-Object System.Collections.ArrayList
     $aryIAsyncResult = New-Object System.Collections.ArrayList
-    $FileList | ForEach-Object { 
-        $FileSource = $_.DirectoryName + $FileSeparator + $_.Name
-        $FileLengthOri = $_.Length
-        $FileName = $_.Name -replace "\.flac$"
+  
+    Write-Uniout "l" "Info" "File list:-----------------------------------------"
+    foreach ( $FileEach in $FileList ) {
+        $FileSource = $FileEach.DirectoryName + $FileSeparator + $FileEach.Name
+        $FileLengthOri = $FileEach.Length
+        $FileName = $FileEach.Name -replace "\.flac$"
         if ( $FolderMode ) {
-            $FileRelativePath = $_.DirectoryName -replace [Regex]::Escape( $InputPathLiteral ), "" 
-            $FileOutput = "$OutputPathLiteral" + "$FileRelativePath" + $FileSeparator + "$FileName" + "$FileSuffix"
-            $FileOutputFolder = "$OutputPathLiteral" + "$FileRelativePath"
+            $FileRelativePath = $FileEach.DirectoryName -replace [Regex]::Escape($InputPathLiteral), "" 
+            $FileOutput = $OutputPathLiteral + $FileRelativePath + $FileSeparator + $FileName + $FileSuffix
+            $FileOutputFolder = $OutputPathLiteral + $FileRelativePath
         }
         else {
             if ( $OutputPath -match "\.flac" ) {
-                $FileOutput = "$OutputPath"
-                $FileOutputFolder = "$OutputPathLiteral" -replace "\$FileSeparator[^/\\\?]+\.flac$"
+                $FileOutput = $OutputPath
+                $FileOutputFolder = $OutputPathLiteral -replace "\$FileSeparator[^/\\\?]+\.flac$"
             }
             else {
-                $FileOutput = "$OutputPathLiteral" + $FileSeparator + "$FileName" + "$FileSuffix"
-                $FileOutputFolder = "$OutputPathLiteral"
+                $FileOutput = $OutputPathLiteral + $FileSeparator + $FileName + $FileSuffix
+                $FileOutputFolder = $OutputPathLiteral
             }
         }
        
-        if ( -not ( Test-Path -LiteralPath "$FileOutputFolder" )) {
-            New-Item -Path "$FileOutputFolder" -ItemType Directory -Force | Out-Null
+        if ( -not ( Test-Path -LiteralPath $FileOutputFolder )) {
+            New-Item -Path $FileOutputFolder -ItemType Directory -Force | Out-Null
         }
-       
+        Write-Uniout "l" "Verbose" "File Source:$FileSource After:$FileOutput"
         $PSObject = [PowerShell]::Create()
         $PSObject.RunspacePool = $RunspacePool
         $PSSubScript = {
@@ -403,14 +405,14 @@ try {
             $ErrorActionPreference = 'Stop'
             try {
                 & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
-                $FileLength = Get-Item -LiteralPath "$FileOutput" | Select-Object -ExpandProperty Length
+                $FileLength = Get-Item -LiteralPath $FileOutput | Select-Object -ExpandProperty Length
                 if ( $OutputReplace ) {
-                    Move-Item -LiteralPath "$FileOutput" -Destination "$FileSource" -Force
+                    Move-Item -LiteralPath $FileOutput -Destination $FileSource -Force
                 }
                 $PSSubResult = "$FileName|$FileLength|$FileLengthori"
             }
             catch {
-                $ErrorMessage = ( $Error[0].Exception.Message -replace "^.*:\s")
+                $ErrorMessage = ( $Error[0].Exception.Message -replace "^.*:\s" )
                 if (( $ConvertID3Tag ) -and ( $ErrorMessage -match "has an ID3" )) {
                     $ErrorActionPreference = 'SilentlyContinue'
                     & $BinaryMetaFLAC --export-tags-to="$FileOutput.tag" "$FileSource"
@@ -420,18 +422,20 @@ try {
                     Remove-Item -LiteralPath "$FileOutput.wav" -Force
                     & $BinaryMetaFLAC --import-tags-from="$FileOutput.tag" "$FileOutput"
                     Remove-Item -LiteralPath "$FileOutput.tag" -Force
-                    if (Test-Path -LiteralPath "$FileOutput.tag_picture") {
+                    if ( Test-Path -LiteralPath "$FileOutput.tag_picture" ) {
                         & $BinaryMetaFLAC --import-picture-from="$FileOutput.tag_picture" "$FileOutput"
                         Remove-Item -LiteralPath "$FileOutput.tag_picture" -Force
                     }
-                    $FileLength = Get-Item -LiteralPath "$FileOutput" | Select-Object -ExpandProperty Length
+                    $FileLength = Get-Item -LiteralPath $FileOutput | Select-Object -ExpandProperty Length
                     if ( $OutputReplace ) {
-                        Move-Item -LiteralPath "$FileOutput" -Destination "$FileSource" -Force
+                        Move-Item -LiteralPath $FileOutput -Destination $FileSource -Force
                     }
                     $PSSubResult = "$FileName|$FileLength|$FileLengthori"
                 }
                 else {
-                    Remove-Item -LiteralPath "$FileOutput" -Force
+                    if ( Test-Path -LiteralPath $FileOutput ) {
+                        Remove-Item -LiteralPath $FileOutput -Force
+                    }
                     if ( $ErrorMessage -match "has an ID3" ) {
                         $ErrorMessage = "has ID3 tag that not support non-standard metadata"
                     }
@@ -451,20 +455,21 @@ try {
         $aryIAsyncResult.Add($IASyncResult) | Out-Null
     }
   
+    Write-Uniout "l" "Info" "Action Result:-------------------------------------"
     while ( $aryPowerShell.Count -gt 0 ) {
-        $ProgressPercent = '{0:n0}' -f (($DoneCount / $FileCount) * 100)
-        $ProgressFileCount = "File " + '{0:n0}' -f ($DoneCount + 1) + "/" + '{0:n0}' -f $FileCount
+        $ProgressPercent = '{0:n0}' -f ((( $DoneCount + $ErrorCount ) / $FileCount ) * 100)
+        $ProgressFileCount = "File " + '{0:n0}' -f ( $DoneCount + $ErrorCount + 1 ) + "/" + '{0:n0}' -f $FileCount
         Write-Progress2 -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
         for ( $i = 0; $i -lt $aryPowerShell.Count; $i++ ) {
             $PSObject = $aryPowerShell[$i]
             $IASyncResult = $aryIAsyncResult[$i]
             if ( $IASyncResult.IsCompleted -eq $true ) {
-                $AsyncResult = [string]($PSObject.EndInvoke($IASyncResult)).TrimEnd("`n")
+                $AsyncResult = [string]( $PSObject.EndInvoke($IASyncResult) ).TrimEnd("`n")
                 # Clear output area
-                if ( [System.Console]::CursorTop -ge ($ProgressLine - 2 )) {
+                if ( [System.Console]::CursorTop -ge ( $ProgressLine - 2 )) {
                     [System.Console]::SetCursorPosition(0, 6)
-                    for ($i1 = 6; $i1 -lt ($ProgressLine - 1); ++$i1) {
-                        Write-Host (" " * $WindowWidth)
+                    for ($i1 = 6; $i1 -lt ( $ProgressLine - 1 ); ++$i1 ) {
+                        Write-Host ( " " * $WindowWidth )
                     }
                     [System.Console]::SetCursorPosition(4, 6)
                 }
@@ -473,12 +478,12 @@ try {
                     $ErrorCount++
                 }
                 else {
-                    $FileName = ($AsyncResult -split "\|")[0]
-                    [int]$FileLength = ($AsyncResult -split "\|")[1]
-                    [int]$FileLengthOri = ($AsyncResult -split "\|")[2]
+                    $FileName = ( $AsyncResult -split "\|" )[0]
+                    [int]$FileLength = ( $AsyncResult -split "\|" )[1]
+                    [int]$FileLengthOri = ( $AsyncResult -split "\|" )[2]
                     $FileSaveSpace = $FileLengthOri - $FileLength
                     if ( $FileSaveSpace -gt 0 ) {
-                        $FileSaveSpaceOutput = "Saved " + (Get-FriendlySize $FileSaveSpace)
+                        $FileSaveSpaceOutput = "Saved " + ( Get-FriendlySize $FileSaveSpace )
                     }
                     else {
                         $FileSaveSpaceOutput = "Already been compressed"
@@ -510,14 +515,19 @@ finally {
         if ( -not $ErrorReasonGet ) {
             Write-Uniout "ls" "Error" "Exit abnormally."
         }
+        [System.Console]::SetCursorPosition(0, $ProgressLine - 1)
+        Write-Host ( " " * ( $WindowWidth - 6 ))
+        [System.Console]::SetCursorPosition(4, $ProgressLine - 1)
+        Write-Host "Stopped" -ForegroundColor Red
+        [System.Console]::SetCursorPosition(0, $ProgressLine + 3)
     }
     $RunspacePool.Close()
 }
 Write-Uniout "ls" "Info" "Compress Completed"
 Write-Progress2 -PercentComplete 100
-[System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
+[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
 Write-Host ( " " * ( $WindowWidth - 6 ))
-[System.Console]::SetCursorPosition( 4, $ProgressLine + 1 )
+[System.Console]::SetCursorPosition(4, $ProgressLine + 1)
 
 if ( $ErrorCount -eq 0 ) {
     $ErrorMessage = "$ErrorCount error occurred."
@@ -533,17 +543,17 @@ else {
     Write-Uniout "ls" "WarningN" $ErrorMessage
 }
 if ( $FileSaveSpaceAll -gt 0 ) {
-    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + (Get-FriendlySize $FileSaveSpaceAll)
+    $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + ( Get-FriendlySize $FileSaveSpaceAll )
 }
 else {
     $FileSaveSpaceAllOutput = "Compressed $DoneCount files. All of files have been compressed."
 }
-Write-Uniout "ls" "Done" "$FileSaveSpaceAllOutput"
+Write-Uniout "ls" "Done" $FileSaveSpaceAllOutput
 if ( $ErrorCount -eq 0 ) {
-    Write-Notify "Info" "$FileSaveSpaceAllOutput"
+    Write-Notify "Info" $FileSaveSpaceAllOutput
 }
 else {
     Write-Notify "Warning" $ErrorMessage
 }
-$TimeUse = '{0:n2}' -f (New-TimeSpan -Start $TimeCount -End (Get-Date)).TotalSeconds
+$TimeUse = '{0:n2}' -f ( New-TimeSpan -Start $TimeCount -End (Get-Date) ).TotalSeconds
 Write-Uniout "l" "Info" "Time use: $TimeUse s"
