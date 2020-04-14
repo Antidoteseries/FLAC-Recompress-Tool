@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.9.4 Beta
+# Version: 0.9.5 Beta
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -68,9 +68,9 @@ function Write-Uniout {
             Write-Host "        Suffix option. It effects recompressed files' name."
             Write-Host "    -l, -log" -ForegroundColor Yellow -NoNewline; Write-Host " <path>" -ForegroundColor Green
             Write-Host "        Log option. You can export log to the path. By default, log will be generate in TEMP folder."
-            Write-Host "    -id3convert" -ForegroundColor Yellow -NoNewline; Write-Host " (Experiment Feature)" -ForegroundColor Red
+            Write-Host "    -id3convert" -ForegroundColor Yellow -NoNewline; Write-Host " (Experiment Feature)" -ForegroundColor White
             Write-Host "        Enable convert id3 tag to standard FLAC tag. If not enable, FLAC with id3 tag will occurate an error."
-            Write-Host "        ID3 tag is not supported by Xiph officially, converting may lost metadata like title, artist and so on."
+            Write-Host "        ID3 tag is not supported by Xiph.org officially, converting may lost metadata like title, artist and so on."
             Write-Host "    -h, -help" -ForegroundColor Yellow
             Write-Host "        Display the help.`n"
             Write-Host "    Examples:"
@@ -122,9 +122,9 @@ function Write-Notify {
         $PSHostPath = Get-Process -id $pid | Select-Object -ExpandProperty Path
         $PSIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($PSHostPath)
         $Notify.Icon = $PSIcon
-        $Notify.BalloonTipTitle = "$ScriptTitle"
-        $Notify.BalloonTipIcon = "$NotifyType"
-        $Notify.BalloonTipText = "$NotifyContent"
+        $Notify.BalloonTipTitle = $ScriptTitle
+        $Notify.BalloonTipIcon = $NotifyType
+        $Notify.BalloonTipText = $NotifyContent
         $Notify.Visible = $true
         $Notify.ShowBalloonTip(5000)
     }
@@ -152,7 +152,7 @@ function Get-FriendlySize {
 
 # Getting script infomation
 $ScriptPath = $MyInvocation.MyCommand.Definition # is Literal Path
-$ScriptFolder = Split-Path -Parent "$ScriptPath"
+$ScriptFolder = Split-Path -Parent $ScriptPath
 $PSVercode = $PSVersionTable.PSVersion.major
 if ( $PSVercode -lt 5 ) {
     Write-Uniout "s" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
@@ -166,7 +166,7 @@ $ScriptTitle = "FLAC Recompress Tool"
 $ScriptInfo = Get-content -LiteralPath $ScriptPath -TotalCount 6 
 $host.UI.RawUI.WindowTitle = $ScriptTitle
 [System.Console]::SetCursorPosition(4, 1)
-Write-Uniout "s" "Center" ( $ScriptTitle + $ScriptInfo[5].Replace("# Version:", "" ) )
+Write-Uniout "s" "Center" ( $ScriptTitle + $ScriptInfo[5].Replace("# Version:", "") )
 Write-Uniout "s" "Center" $ScriptInfo[2].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[4].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[3].Replace("# Source: ", "")
@@ -243,6 +243,8 @@ else {
 if ( -not $LogFilePath ) {
     $LogFilePath = $env:TEMP + $FileSeparator + "FLACRecompress_" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".log"
 }
+
+Write-Uniout "l" "Verbose" "Started"
 Write-Uniout "l" "Verbose" "Architecture: $OSArchitecture"
 Write-Uniout "l" "Verbose" "OS: $OSDescription"
 Write-Uniout "l" "Verbose" "FLAC Version: $BinaryFLACVersion"
@@ -279,7 +281,7 @@ if ( -not $InputPath ) {
     Write-Uniout "ls" "Warning" "Unspecified Inputpath. Using $ScriptFolder as Inputpath."
     $InputPath = $ScriptFolder 
 }
-elseif (( -not ( Test-Path -Path "$InputPath" )) -or ( $InputPath -match '''''''' ) -or ( $InputPath -match '``' )) {
+elseif (( -not ( Test-Path -Path $InputPath )) -or ( $InputPath -match '''''''' ) -or ( $InputPath -match '``' )) {
     Write-Uniout "ls" "Error" "Inputpath invaild or don't have permissions."
     exit 3
 }
@@ -327,7 +329,7 @@ if ( -not ( $FileSuffix -match "\.flac" )) {
 }
 
 if ( $ConvertID3Tag ) {
-    Write-Uniout "ls" "Info" "ID3 Tag Convert is enabled. ID3 tag is not supported by Xiph officially, converting may lost metadata."
+    Write-Uniout "ls" "Info" "ID3 Tag Convert is enabled. ID3 tag is not supported by Xiph.org officially, converting may lost metadata."
 }
 
 if ( Test-Path -LiteralPath $InputPathLiteral -PathType Container ) {
@@ -460,6 +462,7 @@ try {
         $ProgressPercent = '{0:n0}' -f ((( $DoneCount + $ErrorCount ) / $FileCount ) * 100)
         $ProgressFileCount = "File " + '{0:n0}' -f ( $DoneCount + $ErrorCount + 1 ) + "/" + '{0:n0}' -f $FileCount
         Write-Progress2 -PercentComplete $ProgressPercent -CurrentOperation $ProgressFileCount
+        $host.UI.RawUI.WindowTitle = "$ScriptTitle - $ProgressPercent%"
         for ( $i = 0; $i -lt $aryPowerShell.Count; $i++ ) {
             $PSObject = $aryPowerShell[$i]
             $IASyncResult = $aryIAsyncResult[$i]
@@ -515,6 +518,7 @@ finally {
         if ( -not $ErrorReasonGet ) {
             Write-Uniout "ls" "Error" "Exit abnormally."
         }
+        $host.UI.RawUI.WindowTitle = "$ScriptTitle - Stopped"
         [System.Console]::SetCursorPosition(0, $ProgressLine - 1)
         Write-Host ( " " * ( $WindowWidth - 6 ))
         [System.Console]::SetCursorPosition(4, $ProgressLine - 1)
@@ -524,6 +528,7 @@ finally {
     $RunspacePool.Close()
 }
 Write-Uniout "ls" "Info" "Compress Completed"
+$host.UI.RawUI.WindowTitle = "$ScriptTitle - 100%"
 Write-Progress2 -PercentComplete 100
 [System.Console]::SetCursorPosition(4, $ProgressLine + 1)
 Write-Host ( " " * ( $WindowWidth - 6 ))
