@@ -1,9 +1,9 @@
-# Main script
+﻿# Main script
 # The part of FLAC Recompress Tool
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 0.9.5 Beta
+# Version: 1.0.0
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -33,8 +33,18 @@ else {
     $ConvertID3Tag = $false
 }
 
-$WindowWidth = [System.Console]::BufferWidth 
-$WindowHeight = [System.Console]::BufferHeight
+# Some Switch
+# Enable log
+$LogEnabled = $true
+# If file size increased after recompress, keep it (only for replace mode)
+$FileLengthIncreaseKeepEnabled = $true
+# Error filelist output after processing
+$ErrorListOutputEnabled = $true
+# Enable ID3 tag convert by default
+$ConvertID3TagDefault = $false
+
+$WindowWidth = [System.Console]::WindowWidth 
+$WindowHeight = [System.Console]::WindowHeight
 function Write-Uniout {
     param ( 
         $WritePlace, 
@@ -43,7 +53,7 @@ function Write-Uniout {
     )
     $WriteColor = "White" # $host.UI.RawUI.ForegroundColor invaild in Linux
     switch ( $WriteType ) {
-        "Output" { }
+        "Common" { $WriteColor = "White" }
         "Verbose" { $WriteContent = "- " + $WriteContent }
         "Info" { $WriteContent = "> " + $WriteContent }
         "Warning" { $WriteContent = "Warning: " + $WriteContent; $WriteColor = "Yellow" }
@@ -154,14 +164,14 @@ function Get-FriendlySize {
 $ScriptPath = $MyInvocation.MyCommand.Definition # is Literal Path
 $ScriptFolder = Split-Path -Parent $ScriptPath
 $PSVercode = $PSVersionTable.PSVersion.major
-if ( $PSVercode -lt 5 ) {
+if ( $PSVercode -lt 4 ) {
     Write-Uniout "s" "Error" "PowerShell Version is too low. Please update your PowerShell or install PowerShell Core."
+    [System.Console]::SetCursorPosition(0, [System.Console]::CursorTop)
     exit 1
 }
 
 # Title
 Clear-Host
-$LogEnabled = $true
 $ScriptTitle = "FLAC Recompress Tool"
 $ScriptInfo = Get-content -LiteralPath $ScriptPath -TotalCount 6 
 $host.UI.RawUI.WindowTitle = $ScriptTitle
@@ -171,6 +181,10 @@ Write-Uniout "s" "Center" $ScriptInfo[2].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[4].Replace("# ", "")
 Write-Uniout "s" "Center" $ScriptInfo[3].Replace("# Source: ", "")
 Write-Uniout "s" "Divide"
+
+if ( $ConvertID3TagDefault ) {
+    $ConvertID3Tag = ( -not $ConvertID3Tag )
+}
 
 # Help
 if ( $h -or $help ) {
@@ -296,6 +310,7 @@ $InputPathLiteral = ( $InputPath -replace '`\[', '[' -replace '`\]', ']' -replac
 if (( $OutputPath -eq "Replace" ) -or ( $OutputPath -eq "replace" )) {
     $OutputPath = $env:TEMP + $FileSeparator + "Recompressed"
     $OutputReplace = $true
+    Write-Uniout "l" "Info" "Replace mode is enabled"
     if ( $FileSuffix ) {
         Write-Uniout "ls" "Warning" "File suffix can not using in Replace mode."
         $FileSuffix = ".flac"
@@ -353,6 +368,7 @@ else {
     $FileCount = $FileList.Count
 }
 $ErrorCount = 0
+$aryErrorList = New-Object System.Collections.ArrayList
 $DoneCount = 0
 $FileSaveSpaceAll = 0
 $TimeCount = Get-Date
@@ -388,7 +404,7 @@ try {
         if ( -not ( Test-Path -LiteralPath $FileOutputFolder )) {
             New-Item -Path $FileOutputFolder -ItemType Directory -Force | Out-Null
         }
-        Write-Uniout "l" "Verbose" "File Source:$FileSource After:$FileOutput"
+        Write-Uniout "l" "Verbose" "File Source: $FileSource    To:$FileOutput"
         $PSObject = [PowerShell]::Create()
         $PSObject.RunspacePool = $RunspacePool
         $PSSubScript = {
@@ -401,17 +417,23 @@ try {
                 [parameter(mandatory, position = 4)][string]$FileName,
                 [parameter(mandatory, position = 5)][string]$FileLengthOri,
                 [parameter(mandatory, position = 6)][switch]$OutputReplace,
-                [parameter(mandatory, position = 7)][switch]$ConvertID3Tag
+                [parameter(mandatory, position = 7)][switch]$FileLengthIncreaseKeepEnabled,
+                [parameter(mandatory, position = 8)][switch]$ConvertID3Tag
             )
             # For catch error
             $ErrorActionPreference = 'Stop'
             try {
-                & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1 | Out-Null
+                & $BinaryFLAC -fsw8 -V -o "$FileOutput" "$FileSource" *>&1
                 $FileLength = Get-Item -LiteralPath $FileOutput | Select-Object -ExpandProperty Length
                 if ( $OutputReplace ) {
-                    Move-Item -LiteralPath $FileOutput -Destination $FileSource -Force
+                    if (( $FileLengthOri -gt $FileLength ) -or $FileLengthIncreaseKeepEnabled ) {
+                        Move-Item -LiteralPath $FileOutput -Destination $FileSource -Force
+                    }
+                    else {
+                        Remove-Item -LiteralPath $FileOutput -Force
+                    }
                 }
-                $PSSubResult = "$FileName|$FileLength|$FileLengthori"
+                $PSSubResult = "$FileName|$FileLength|$FileLengthOri"
             }
             catch {
                 $ErrorMessage = ( $Error[0].Exception.Message -replace "^.*:\s" )
@@ -430,9 +452,10 @@ try {
                     }
                     $FileLength = Get-Item -LiteralPath $FileOutput | Select-Object -ExpandProperty Length
                     if ( $OutputReplace ) {
+                        # ID3 Converted file isn't check file size
                         Move-Item -LiteralPath $FileOutput -Destination $FileSource -Force
                     }
-                    $PSSubResult = "$FileName|$FileLength|$FileLengthori"
+                    $PSSubResult = "$FileName|$FileLength|$FileLengthOri"
                 }
                 else {
                     if ( Test-Path -LiteralPath $FileOutput ) {
@@ -451,7 +474,7 @@ try {
                 $PSSubResult
             }
         }
-        $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($BinaryMetaFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace).AddArgument($ConvertID3Tag) | Out-Null
+        $PSObject.AddScript($PSSubScript).AddArgument($BinaryFLAC).AddArgument($BinaryMetaFLAC).AddArgument($FileOutput).AddArgument($FileSource).AddArgument($FileName).AddArgument($FileLengthOri).AddArgument($OutputReplace).AddArgument($FileLengthIncreaseKeepEnabled).AddArgument($ConvertID3Tag) | Out-Null
         $IASyncResult = $PSObject.BeginInvoke()
         $aryPowerShell.Add($PSObject) | Out-Null
         $aryIAsyncResult.Add($IASyncResult) | Out-Null
@@ -478,6 +501,7 @@ try {
                 }
                 if ( $AsyncResult -cmatch "Error:" ) {
                     Write-Uniout "ls" "ErrorN" $AsyncResult
+                    $aryErrorList.Add($AsyncResult) | Out-Null
                     $ErrorCount++
                 }
                 else {
@@ -547,6 +571,12 @@ else {
     $ErrorMessage = "$ErrorCount errors occurred."
     Write-Uniout "ls" "WarningN" $ErrorMessage
 }
+if ( $ErrorListOutputEnabled -and ( $aryErrorList.Count -gt 0 )) {
+    Write-Uniout "s" "Info" "Detailed Error filelist" 
+    foreach ( $ErrorEntry in $aryErrorList ) {
+        Write-Uniout "s" "Common" $ErrorEntry
+    }
+}
 if ( $FileSaveSpaceAll -gt 0 ) {
     $FileSaveSpaceAllOutput = "Compressed $DoneCount files. Totally saved " + ( Get-FriendlySize $FileSaveSpaceAll )
 }
@@ -562,3 +592,4 @@ else {
 }
 $TimeUse = '{0:n2}' -f ( New-TimeSpan -Start $TimeCount -End (Get-Date) ).TotalSeconds
 Write-Uniout "l" "Info" "Time use: $TimeUse s"
+[System.Console]::SetCursorPosition(0, [System.Console]::CursorTop)

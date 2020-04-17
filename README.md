@@ -1,5 +1,4 @@
 # FLAC Recompress Tool
-## Please notice that the script still in developing. All features may changed before the first stable version released.
 ![ScreenShot](resource/ScreenShot.png)
 ## What's this?
 The script can recompress your FLAC audio file to save your disk space with the same quality. After recompression, the size of the file will reduced by up to 50%. (based on your FLAC compression level)  
@@ -19,7 +18,7 @@ See notes below for more details.
 
 Windows support x86, x64 and ARM64
 ## Requirements
-- PowerShell 5.1 (based on .NET Framework)
+- PowerShell 4 or higher (based on .NET Framework)
 - PowerShell 7 or higher (based on .NET Core) See more at https://aka.ms/powershell
 
 ## Restricted script execution
