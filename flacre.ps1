@@ -3,7 +3,7 @@
 # Author: Antidotes
 # Source: https://github.com/Antidoteseries/FLAC-Recompress-Tool
 # Licenced by GPLv3
-# Version: 1.0.0
+# Version: 1.0.1
 ###########################################################################
 [CmdletBinding()]
 param (
@@ -288,6 +288,16 @@ if ( -not $InputPath ) {
         $OutputPath = Read-Host "Output file or folder path (-o)"
         [System.Console]::SetCursorPosition(4, [System.Console]::CursorTop)
     }
+}
+
+# Fix Path Separator
+if ( $PSHostWindows ) {
+    $InputPath = $InputPath -replace '/', '\'
+    $OutputPath = $OutputPath -replace '/', '\'
+}
+else {
+    $InputPath = $InputPath -replace '\', '/'
+    $OutputPath = $OutputPath -replace '\', '/'
 }
 
 # Initialize Paramaters
