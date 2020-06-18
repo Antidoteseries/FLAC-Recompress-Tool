@@ -9,8 +9,7 @@ It's useful for some Hi-Res Store Music like Mora.
 `flacre [options] -path [<inputpath>] -output [<outputpath>/Replace]`
 
 For example: `flacre.ps1 -p C:\Users\Admin\Music -o D:\Recompressed`  
-See notes below for more details.
-
+See notes below for more details. Japanese and Simplified Chinese are also supported in the release version.
 ## Supports Platform
 - Windows 7,8,8.1,10 or higher
 - macOS 10.12 or higher
